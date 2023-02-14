@@ -14,8 +14,7 @@ open FSharp.Text // if removed, any project using types such as Position and Lex
 let parse_float (s: string) =
     Double.Parse(s, Globalization.NumberStyles.Float, Globalization.CultureInfo.InvariantCulture)
 
-// list of strings mappers
-//
+// --- LIST OF STRINGS MAPPERS
 
 let mappen_strings_or_nothing f empty sep xs =
     match Seq.toList xs with
@@ -34,8 +33,7 @@ let flatten_stringables sep = mappen_stringables id sep
 
 (* error locating *)
 
-// yacc/lex utilities
-//
+// --- YACC/LEX UTILS
 
 module LexYacc =
     exception ParseErrorContextException of obj
@@ -44,8 +42,7 @@ module LexYacc =
     let lexeme = Lexing.LexBuffer<_>.LexemeString
 
 
-// FsYacc parser wrapper
-//
+// --- FSYACC PARSER WRAPPER
 
 let yparse syntax_error parser (tokenizer: Lexing.LexBuffer<_> -> 'tok) tokenTagToTokenId =
     let pretty_token_by_tags =
@@ -113,7 +110,7 @@ let init_lexbuf filename (start_line, start_col) (lexbuf: Lexing.LexBuffer<_>) =
           Lexing.Position.pos_fname = filename
           Lexing.Position.pos_cnum = start_col
           Lexing.Position.pos_lnum = start_line
-          Lexing.Position.pos_orig_lnum = 0 } // IDK?????????
+          Lexing.Position.pos_orig_lnum = start_line } // HACK : WONTCOMPILE WIHTOUT
 
     lexbuf.StartPos <- r
     lexbuf.EndPos <- r

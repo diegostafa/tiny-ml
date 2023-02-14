@@ -70,7 +70,6 @@ let main_interactive () =
 
             printfn "val %s : %s = %s" x (pretty_ty t) (pretty_value v)
 
-
 [<EntryPoint>]
 let main argv =
     let r =

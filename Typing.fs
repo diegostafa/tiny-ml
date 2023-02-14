@@ -33,15 +33,13 @@ let freevars_scheme_env env =
     List.fold (fun r (_, sch) -> r + freevars_scheme sch) Set.empty env
 
 
-// basic environment: add builtin operators at will
-//
+// --- BASIC ENVIRONMENT: add builtin operators at will
 
 let gamma0 =
     [ ("+", TyArrow(TyInt, TyArrow(TyInt, TyInt)))
       ("-", TyArrow(TyInt, TyArrow(TyInt, TyInt)))
 
       ]
-
 
 // TODO continue implementing this
 let rec typeinfer_expr (env: scheme env) (e: expr) : ty * subst =
@@ -63,8 +61,7 @@ let rec typeinfer_expr (env: scheme env) (e: expr) : ty * subst =
     | _ -> failwithf "not implemented"
 
 
-// type checker
-//
+// --- TYPE CHECKER
 
 let rec typecheck_expr (env: ty env) (e: expr) : ty =
     match e with

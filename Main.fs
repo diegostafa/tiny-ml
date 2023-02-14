@@ -54,12 +54,8 @@ let main_interactive () =
 
             let x, (t, v) =
                 match parse_from_TextReader stdin "LINE" Parser.interactive with
-                | IExpr e ->
-                    printfn "BELLA1"
-                    "it", interpret_expr tenv venv e
-
+                | IExpr e -> "it", interpret_expr tenv venv e
                 | IBinding (_, x, _, _ as b) ->
-                    printfn "BELLA2"
                     let t, v = interpret_expr tenv venv (LetIn(b, Var x)) // TRICK: put the variable itself as body after the in
                     tenv <- (x, t) :: tenv
                     venv <- (x, v) :: venv

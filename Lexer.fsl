@@ -14,7 +14,7 @@ let trim c lexbuf = let s = lexeme lexbuf in s.TrimStart [|c|]
 
 let whitespace = [' ' '\t' ]
 let newline = ('\n' | "\r\n")
-let digit = ['0'-'9'] 
+let digit = ['0'-'9']
 let nat = digit+
 let ureal = digit* '.' digit+ | digit+ '.' digit*
 let sreal = ['-']? ureal
@@ -23,7 +23,7 @@ let int = ['-']? nat
 let long = int 'l'
 let quoted = "\"" [^'"']* "\""
 
-let idbody = ['a'-'z' 'A'-'Z' '0'-'9' '_']*['\'']*	
+let idbody = ['a'-'z' 'A'-'Z' '0'-'9' '_']*['\'']*
 let Uid = ['A'-'Z'] idbody
 let Lid = ['a'-'z' '_'] idbody
 let id = Uid | Lid
@@ -32,7 +32,7 @@ rule comment level = parse
 	| "(*"          	{ comment (level + 1) lexbuf }
 	| "*)"	            { if level = 0 then tokenize lexbuf else comment (level - 1) lexbuf }
     | "*)"				{ tokenize lexbuf }
-	| newline			{ newline lexbuf; comment level lexbuf } 
+	| newline			{ newline lexbuf; comment level lexbuf }
 	| _					{ comment level lexbuf }
 
 and linecomment = parse
@@ -46,7 +46,7 @@ and tokenize = parse
 
 	| "//"				{ linecomment lexbuf }
 	| "(*"          	{ comment 0 lexbuf }
-     
+
 	| '+'			{ PLUS }
 	| '-'			{ MINUS }
 	| '*'			{ STAR }
@@ -73,7 +73,7 @@ and tokenize = parse
 	| "let"			{ LET }
 	| "rec"			{ REC }
 	| "in"			{ IN }
-    
+
 	// brakets
 	| '('			{ BRA }
 	| ')'			{ KET }
@@ -91,6 +91,5 @@ and tokenize = parse
 
 	// identifiers
 	| id 		            { ID (lexeme lexbuf) }
-
 
 

@@ -7,17 +7,13 @@ Simple interpreter for the core language of ML.
 dev deps:
 - dotnet-sdk
 - dotnet-runtime
-
-project deps:
-```bash
-dotnet add package Fsharp.Core
-dotnet add package FsLexYacc
-dotnet add package FsLexYacc.runtime
-dotnet add package System.ValueTuple
-```
+- mono
+- nuget
 
 build:
-```
+```bash
+nuget restore
+make gen-lexer-parser
 dotnet build
 ```
 

@@ -109,8 +109,7 @@ let init_lexbuf filename (start_line, start_col) (lexbuf: Lexing.LexBuffer<_>) =
         { Lexing.Position.pos_bol = 0
           Lexing.Position.pos_fname = filename
           Lexing.Position.pos_cnum = start_col
-          Lexing.Position.pos_lnum = start_line
-          Lexing.Position.pos_orig_lnum = start_line } // HACK : WONTCOMPILE WIHTOUT
+          Lexing.Position.pos_lnum = start_line }
 
     lexbuf.StartPos <- r
     lexbuf.EndPos <- r

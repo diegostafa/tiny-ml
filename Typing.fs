@@ -12,7 +12,10 @@ let type_error fmt = throw_formatted TypeError fmt
 type subst = (tyvar * ty) list
 
 // TODO implement this
-let unify (t1: ty) (t2: ty) : subst = []
+let unify (t1: ty) (t2: ty) : subst =
+    match (t1, t2) with
+    | _ when t1 = t2 -> []
+    | _ -> []
 
 // TODO implement this
 let apply_subst (t: ty) (s: subst) : ty = t

@@ -8,21 +8,16 @@ module TinyML.Main
 open System
 open FSharp.Common
 open TinyML.Ast
-open TinyML.Lexer
 
 let parse_from_TextReader rd filename parser =
     Parsing.parse_from_TextReader SyntaxError rd filename (1, 1) parser Lexer.tokenize Parser.tokenTagToTokenId
 
 let interpret_expr tenv venv e =
-#if DEBUG
-    printfn "AST:\t%A\npretty:\t%s" e (pretty_expr e)
-#endif
     let t = Typing.typecheck_expr tenv e
-#if DEBUG
-    printfn "type:\t%s" (pretty_ty t)
-#endif
     let v = Eval.eval_expr venv e
 #if DEBUG
+    printfn "AST:\t%A\npretty:\t%s" e (pretty_expr e)
+    printfn "type:\t%s" (pretty_ty t)
     printfn "value:\t%s\n" (pretty_value v)
 #endif
     t, v
@@ -59,11 +54,13 @@ let main_interactive () =
 
             let x, (t, v) =
                 match parse_from_TextReader stdin "LINE" Parser.interactive with
-                | IExpr e -> "it", interpret_expr tenv venv e
+                | IExpr e ->
+                    printfn "BELLA1"
+                    "it", interpret_expr tenv venv e
 
                 | IBinding (_, x, _, _ as b) ->
+                    printfn "BELLA2"
                     let t, v = interpret_expr tenv venv (LetIn(b, Var x)) // TRICK: put the variable itself as body after the in
-                    // update global environments
                     tenv <- (x, t) :: tenv
                     venv <- (x, v) :: venv
                     x, (t, v)

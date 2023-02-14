@@ -1,0 +1,99 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- INFO -->
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net7.0</TargetFramework>
+    <RootNamespace>TinyML</RootNamespace>
+    <AssemblyName>TinyML</AssemblyName>
+    <Name>TinyML</Name>
+  </PropertyGroup>
+
+  <!-- COMPILATION UNITS -->
+  <ItemGroup>
+    <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="Ast.fs" />
+    <Compile Include="Parsing.fs" />
+    <FsYacc Include="Parser.fsy">
+      <OtherFlags>--module TinyML.Parser -v</OtherFlags>
+    </FsYacc>
+    <FsLex Include="Lexer.fsl">
+      <OtherFlags>--unicode --module TinyML.Lexer</OtherFlags>
+    </FsLex>
+    <Compile Include="Parser.fsi" />
+    <Compile Include="Parser.fs" />
+    <Compile Include="Lexer.fs" />
+    <Compile Include="Typing.fs" />
+    <Compile Include="Eval.fs" />
+    <Compile Include="Main.fs" />
+    <None Include="test.tml" />
+  </ItemGroup>
+
+  <!-- PACKAGES -->
+  <ItemGroup>
+    <Reference Include="FSharp.Core" Version="11.0.1" />
+    <PackageReference Include="FsLexYacc" Version="11.0.1" />
+    <PackageReference Include="FsLexYacc.Runtime" Version="11.0.1" />
+    <PackageReference Include="System.ValueTuple" Version="4.5.0" />
+  </ItemGroup>
+
+  <!-- DEBUG -->
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <Tailcalls>false</Tailcalls>
+    <OutputPath>bin/$(Configuration)/</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <WarningLevel>5</WarningLevel>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DocumentationFile>bin/$(Configuration)/$(AssemblyName).XML</DocumentationFile>
+    <Prefer32Bit>false</Prefer32Bit>
+    <StartArguments>test.tml</StartArguments>
+  </PropertyGroup>
+
+  <!-- RELEASE -->
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <Tailcalls>true</Tailcalls>
+    <OutputPath>bin/$(Configuration)/</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <WarningLevel>5</WarningLevel>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DocumentationFile>bin/$(Configuration)/$(AssemblyName).XML</DocumentationFile>
+    <Prefer32Bit>false</Prefer32Bit>
+    <StartArguments>test.tml</StartArguments>
+  </PropertyGroup>
+
+  <!-- DEBUG INTERACTIVE -->
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug Interactive|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <Tailcalls>false</Tailcalls>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <WarningLevel>5</WarningLevel>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DocumentationFile>bin/$(Configuration)/$(AssemblyName).XML</DocumentationFile>
+    <Prefer32Bit>false</Prefer32Bit>
+    <OutputPath>bin/Debug Interactive/</OutputPath>
+  </PropertyGroup>
+
+  <!-- RELEASE INTERACTIVE -->
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release Interactive|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <Tailcalls>true</Tailcalls>
+    <DefineConstants>TRACE</DefineConstants>
+    <WarningLevel>5</WarningLevel>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DocumentationFile>bin/$(Configuration)/$(AssemblyName).XML</DocumentationFile>
+    <Prefer32Bit>false</Prefer32Bit>
+    <OutputPath>bin/Release Interactive/</OutputPath>
+  </PropertyGroup>
+
+</Project>

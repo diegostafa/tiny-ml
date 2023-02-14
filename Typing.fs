@@ -9,19 +9,43 @@ open Ast
 
 let type_error fmt = throw_formatted TypeError fmt
 
+
+// --- TODO SUBSTITUTION
+
 type subst = (tyvar * ty) list
 
-// TODO implement this
-let unify (t1: ty) (t2: ty) : subst =
+let search_subst key s =
+    List.tryFind (fun (tv, _) -> key = tv) s
+
+let rec apply_subst (s: subst) (t: ty) =
+    match t with
+    | TyName (_) -> t
+    | TyArrow (l, r) -> (apply_subst s l, apply_subst s r) |> TyArrow
+    | TyTuple (vals) -> vals |> List.map (apply_subst s) |> TyTuple
+    | TyVar (var) ->
+        match search_subst var s with
+        | Some v -> snd v
+        | None -> t
+
+let compose_subst (s1: subst) (s2: subst) =
+    s1
+    |> List.map (fun (var, ty) -> (var, apply_subst s2 ty))
+    |> List.append s2
+    |> List.distinctBy fst
+
+
+// --- TODO UNIFICATION
+
+let rec unify (t1: ty) (t2: ty) : subst =
     match (t1, t2) with
-    | _ when t1 = t2 -> []
+    | TyName (n1), TyName (n2) when n1 = n2 -> []
+    | _, TyVar v -> [ (v, t1) ]
+    | TyVar v, _ -> [ (v, t2) ]
+    | TyArrow (t1l, t1r), TyArrow (t2l, t2r) -> []
     | _ -> []
 
-// TODO implement this
-let apply_subst (t: ty) (s: subst) : ty = t
 
-// TODO implement this
-let compose_subst (s1: subst) (s2: subst) : subst = s1 @ s2
+// --- TODO FREEVARS
 
 let rec freevars_ty t =
     match t with

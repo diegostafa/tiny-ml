@@ -9,6 +9,19 @@ open Ast
 
 let type_error fmt = throw_formatted TypeError fmt
 
+// --- TODO FREEVARS
+
+let rec freevars_ty t =
+    match t with
+    | TyName _ -> Set.empty
+    | TyArrow (t1, t2) -> (freevars_ty t1) + (freevars_ty t2)
+    | TyVar tv -> Set.singleton tv
+    | TyTuple ts -> List.fold (fun r t -> r + freevars_ty t) Set.empty ts
+
+let freevars_scheme (Forall (tvs, t)) = freevars_ty t - tvs
+
+let freevars_scheme_env env =
+    List.fold (fun r (_, sch) -> r + freevars_scheme sch) Set.empty env
 
 // --- TODO SUBSTITUTION
 
@@ -36,28 +49,50 @@ let compose_subst (s1: subst) (s2: subst) =
 
 // --- TODO UNIFICATION
 
-let rec unify (t1: ty) (t2: ty) : subst =
+let rec occurs (var: tyvar) (t: ty) : bool = Set.contains var (freevars_ty t)
+
+let rec unify (t1: ty) (t2: ty) =
     match (t1, t2) with
-    | TyName (n1), TyName (n2) when n1 = n2 -> []
-    | _, TyVar v -> [ (v, t1) ]
-    | TyVar v, _ -> [ (v, t2) ]
-    | TyArrow (t1l, t1r), TyArrow (t2l, t2r) -> []
-    | _ -> []
+    | TyName n1, TyName n2 when n1 = n2 -> []
+    | TyTuple (x :: xs), TyTuple (y :: ys) when xs.Length = ys.Length ->
+        let head = unify x y
 
+        let tail =
+            unify
+                (TyTuple(xs |> List.map (fun e -> apply_subst head e)))
+                (TyTuple(ys |> List.map (fun e -> apply_subst head e)))
 
-// --- TODO FREEVARS
+        head @ tail
+    | TyArrow (l1, r1), TyArrow (l2, r2) -> compose_subst (unify l1 l2) (unify r1 r2)
+    | TyVar var, t when not (occurs var t) -> [ (var, t) ]
+    | t, TyVar var when not (occurs var t) -> [ (var, t) ]
 
-let rec freevars_ty t =
-    match t with
-    | TyName s -> Set.empty
-    | TyArrow (t1, t2) -> (freevars_ty t1) + (freevars_ty t2)
-    | TyVar tv -> Set.singleton tv
-    | TyTuple ts -> List.fold (fun r t -> r + freevars_ty t) Set.empty ts
-
-let freevars_scheme (Forall (tvs, t)) = freevars_ty t - tvs
-
-let freevars_scheme_env env =
-    List.fold (fun r (_, sch) -> r + freevars_scheme sch) Set.empty env
+    // error cases
+    | TyName _, TyName _ ->
+        type_error
+            "unify error: different costant types can't be unified (t1 = %s , t2 = %s)"
+            (pretty_ty t1)
+            (pretty_ty t2)
+    | TyTuple _, TyTuple _ ->
+        type_error
+            "unify error: tuples with different sizes can't be unified (t1 = %s , t2 = %s)"
+            (pretty_ty t1)
+            (pretty_ty t2)
+    | TyVar _, _ ->
+        type_error
+            "unify error: t2 can't be unified if it occurs in t1 (t1 = %s , t2 = %s)"
+            (pretty_ty t1)
+            (pretty_ty t2)
+    | _, TyVar _ ->
+        type_error
+            "unify error: t2 can't be unified if it occurs in t1 (t1 = %s , t2 = %s)"
+            (pretty_ty t1)
+            (pretty_ty t2)
+    | _ ->
+        type_error
+            "unify error: unification is not supported with these types(t1 = %s , t2 = %s)"
+            (pretty_ty t1)
+            (pretty_ty t2)
 
 
 // --- BASIC ENVIRONMENT: add builtin operators at will

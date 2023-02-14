@@ -7,8 +7,6 @@ Simple interpreter for the core language of ML.
 dev deps:
 - dotnet-sdk
 - dotnet-runtime
-- mono
-- nuget
 
 project deps:
 ```bash

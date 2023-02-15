@@ -107,10 +107,14 @@ let rec unify ty1 ty2 =
 
 // --- TYPE CHECKER
 
+// in: unit
+// out: scheme environement for type checking
 let gamma0 =
     [ ("+", TyArrow(TyInt, TyArrow(TyInt, TyInt)))
       ("-", TyArrow(TyInt, TyArrow(TyInt, TyInt))) ]
 
+// in: expression, type environment
+// out: type of the expression
 let rec typecheck_expr (env: ty env) (e: expr) : ty =
     match e with
     | Lit (LInt _) -> TyInt
@@ -122,11 +126,12 @@ let rec typecheck_expr (env: ty env) (e: expr) : ty =
 
     | Var v -> env |> List.find (fun (var, _) -> var = v) |> snd
 
-    | Lambda (_, None, _) -> unexpected_error "typecheck_expr: unannotated lambda is not supported"
-
-    | Lambda (x, Some t1, e) ->
-        let t2 = typecheck_expr ((x, t1) :: env) e
-        TyArrow(t1, t2)
+    | Lambda (x, ann, e) ->
+        match ann with
+        | Some t ->
+            let t2 = typecheck_expr ((x, t) :: env) e
+            TyArrow(t, t2)
+        | None -> unexpected_error "typecheck_expr: unannotated lambda is not supported"
 
     | App (e1, e2) ->
         let t1 = typecheck_expr env e1
@@ -280,38 +285,37 @@ let gen_fresh_tv =
     fresh_tv_counter <- fresh_tv_counter + 1
     TyVar fresh_tv_counter
 
-let gen_fake_scheme ty = Forall(Set.empty, ty)
-
 // in: scheme
-// out: type where every freevar is substituted with a fresh var
+// out: non quntified type with refreshed type variables
 let instantiate sch =
     match sch with
     | Forall (tvs, ty) ->
         let fresh_sub =
-            freevars_ty ty
-            |> Set.intersect tvs
+            tvs
             |> Set.map (fun tv -> (tv, gen_fresh_tv))
             |> Set.toList
 
         apply_subst fresh_sub ty
 
-// let rec refresh tvs ty =
-//     match ty with
-//     | TyName _ -> ty
-//     | TyVar a when not (List.contains a tvs) -> ty
-//     | TyVar _ -> gen_fresh_var
-//     | TyArrow (l, r) -> TyArrow(refresh tvs l, refresh tvs r)
-//     | TyTuple (ts) -> ts |> List.map (refresh tvs) |> TyTuple
-
-
+// in: type, scheme environment
+// out: scheme quantifying every tv in the type not in the env
 let generalize ty env =
     let qtv = (freevars_ty ty) - (freevars_scheme_env env)
     Forall(qtv, ty)
 
+// in: substitution, scheme environment
+// out: a new environment in which every type has been applied to the substitution
+let apply_subst_to_env s env =
+    List.map (fun (key, (Forall (tvs, ty))) -> (key, (Forall(tvs, apply_subst s ty)))) env
+
+// in: unit
+// out: scheme environement for type inference
 let scheme_gamma0 =
     gamma0
     |> List.fold (fun env (tv, ty) -> env @ [ (tv, generalize ty env) ]) []
 
+// in: expression, scheme environment
+// out: type of the expression, substitution
 let rec typeinfer_expr expr env =
     match expr with
     | Lit (LInt _) -> TyInt, []
@@ -332,18 +336,68 @@ let rec typeinfer_expr expr env =
             | Some ty -> ty
             | None -> gen_fresh_tv
 
-        let param_ty = gen_fresh_tv
-        let new_env = (param, gen_fake_scheme param_ty) :: env
+        let new_env = (param, generalize param_ty []) :: env
         let body_ty, body_s = typeinfer_expr body new_env
         let param_ty = apply_subst body_s param_ty
         TyArrow(param_ty, body_ty), body_s
 
+    | App (l, r) ->
+        let l_ty, l_s = typeinfer_expr l env
+        let r_ty, r_s = typeinfer_expr r (apply_subst_to_env l_s env)
+        let l_ty = apply_subst r_s l_ty
 
-    | Let (var, _, e1, e2) ->
-        let t1, s1 = typeinfer_expr e1 env
-        let tvs = freevars_ty t1 - freevars_scheme_env env
-        let sch = Forall(tvs, t1)
-        let t2, s2 = typeinfer_expr e2 ((var, sch) :: env)
-        t2, compose_subst s2 s1
+        // check if the left expression is actually a lambda
+        let ret_ty = gen_fresh_tv
+        let arr_s = unify l_ty (TyArrow(r_ty, ret_ty))
+
+        let final_s = l_s |> compose_subst r_s |> compose_subst arr_s
+        let app_ty = apply_subst final_s ret_ty
+
+        app_ty, final_s
+
+    | Let (name, ann, e1, e2) ->
+        let e1_ty, e1_s =
+            match ann with
+            | Some ty -> ty, []
+            | None -> typeinfer_expr e1 env
+
+        let sch = generalize e1_ty env
+        let e2_ty, e2_s = typeinfer_expr e2 ((name, sch) :: env)
+
+        e2_ty, compose_subst e2_s e1_s
+
+    | Tuple (ts) ->
+        let fold_infer_tuple (acc_ty, acc_s, acc_env) t =
+            let t_ty, t_s = typeinfer_expr t acc_env
+            let t_ty = acc_ty @ [ t_ty ]
+            let new_s = compose_subst t_s acc_s
+            let new_env = apply_subst_to_env t_s acc_env
+            (t_ty, new_s, new_env)
+
+        let t_ty, t_s, _ = List.fold fold_infer_tuple ([], [], env) ts
+
+        TyTuple t_ty, t_s
+
+    | IfThenElse (cond, e1, e2) ->
+        // if
+        let cond_ty, cond_s = typeinfer_expr cond env
+        let acc_s = compose_subst cond_s (unify cond_ty TyBool)
+        let new_env = apply_subst_to_env acc_s env
+
+        // then
+        let e1_ty, e1_s = typeinfer_expr e1 new_env
+        let acc_s = compose_subst acc_s e1_s
+        let new_env = apply_subst_to_env acc_s new_env
+
+        // else
+        match e2 with
+        | Some e2 ->
+            let e2_ty, e2_s = typeinfer_expr e2 new_env
+            let acc_s = compose_subst acc_s e2_s
+            let unify_branch = unify (apply_subst acc_s e1_ty) (apply_subst acc_s e2_ty)
+            let e_ty = apply_subst acc_s e1_ty
+            let acc_s = compose_subst acc_s unify_branch
+            e_ty, acc_s
+        | None -> TyUnit, compose_subst (unify e1_ty TyUnit) acc_s
 
     | _ -> failwithf "not implemented"

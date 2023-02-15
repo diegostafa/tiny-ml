@@ -115,7 +115,7 @@ let gamma0 =
 
 // in: expression, type environment
 // out: type of the expression
-let rec typecheck_expr (env: ty env) (e: expr) : ty =
+let rec typecheck_expr env e =
     match e with
     | Lit (LInt _) -> TyInt
     | Lit (LFloat _) -> TyFloat

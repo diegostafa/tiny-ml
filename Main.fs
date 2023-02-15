@@ -9,18 +9,33 @@ open System
 open FSharp.Common
 open TinyML.Ast
 
+type TypingAlgorithm =
+    | TCheck
+    | TInference
+
 let parse_from_TextReader rd filename parser =
     Parsing.parse_from_TextReader SyntaxError rd filename (1, 1) parser Lexer.tokenize Parser.tokenTagToTokenId
 
-let interpret_expr tenv venv e =
-    let tc = Typing.typecheck_expr tenv e
+let interpret_expr_tc tenv venv e =
+    let e_ty = Typing.typecheck_expr tenv e
     let v = Eval.eval_expr venv e
 #if DEBUG
     printfn "AST:\t%A\npretty:\t%s" e (pretty_expr e)
-    printfn "type:\t%s" (pretty_ty tc)
+    printfn "type:\t%s" (pretty_ty e_ty)
     printfn "value:\t%s\n" (pretty_value v)
 #endif
-    t, v
+    e_ty, v
+
+let interpret_expr_ti tenv venv e =
+    let e_ty, final_s = Typing.typeinfer_expr e tenv
+    let v = Eval.eval_expr venv e
+#if DEBUG
+    printfn "AST:\t%A\npretty:\t%s" e (pretty_expr e)
+    printfn "type:\t%s" (pretty_ty e_ty)
+    printfn "value:\t%s\n" (pretty_value v)
+#endif
+    e_ty, v
+
 
 let trap f =
     try
@@ -38,7 +53,7 @@ let main_interpreter filename =
         use fstr = new IO.FileStream(filename, IO.FileMode.Open)
         use rd = new IO.StreamReader(fstr)
         let prg = parse_from_TextReader rd filename Parser.program
-        let t, v = interpret_expr [] [] prg
+        let t, v = interpret_expr_tc [] [] prg
         printfn "type:\t%s\nvalue:\t%s" (pretty_ty t) (pretty_value v)
 
 let main_interactive () =
@@ -54,9 +69,9 @@ let main_interactive () =
 
             let x, (t, v) =
                 match parse_from_TextReader stdin "LINE" Parser.interactive with
-                | IExpr e -> "it", interpret_expr tenv venv e
+                | IExpr e -> "it", interpret_expr_tc tenv venv e
                 | IBinding (_, x, _, _ as b) ->
-                    let t, v = interpret_expr tenv venv (LetIn(b, Var x)) // TRICK: put the variable itself as body after the in
+                    let t, v = interpret_expr_tc tenv venv (LetIn(b, Var x)) // TRICK: put the variable itself as body after the in
                     tenv <- (x, t) :: tenv
                     venv <- (x, v) :: venv
                     x, (t, v)

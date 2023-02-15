@@ -8,7 +8,7 @@ module TinyML.Typing
 open Ast
 
 type subst = (tyvar * ty) list
-let mutable private fresh_var_counter = 0
+let mutable private fresh_tv_counter = 0
 let type_error fmt = throw_formatted TypeError fmt
 
 // --- FREEVARS
@@ -276,20 +276,24 @@ let rec typecheck_expr (env: ty env) (e: expr) : ty =
 
 // in: unit
 // out: fresh type variable
-let gen_fresh_var =
-    fresh_var_counter <- fresh_var_counter + 1
-    TyVar fresh_var_counter
+let gen_fresh_tv =
+    fresh_tv_counter <- fresh_tv_counter + 1
+    TyVar fresh_tv_counter
+
+let gen_fake_scheme ty = Forall(Set.empty, ty)
 
 // in: scheme
 // out: type where every freevar is substituted with a fresh var
-let instantiate (Forall (tvs, ty)) =
-    let fresh_sub =
-        freevars_ty ty
-        |> Set.intersect tvs
-        |> Set.map (fun tv -> (tv, gen_fresh_var))
-        |> Set.toList
+let instantiate sch =
+    match sch with
+    | Forall (tvs, ty) ->
+        let fresh_sub =
+            freevars_ty ty
+            |> Set.intersect tvs
+            |> Set.map (fun tv -> (tv, gen_fresh_tv))
+            |> Set.toList
 
-    apply_subst fresh_sub ty
+        apply_subst fresh_sub ty
 
 // let rec refresh tvs ty =
 //     match ty with
@@ -300,15 +304,15 @@ let instantiate (Forall (tvs, ty)) =
 //     | TyTuple (ts) -> ts |> List.map (refresh tvs) |> TyTuple
 
 
-let generalize ty senv =
-    let qtv = (freevars_ty ty) - (freevars_scheme_env senv)
+let generalize ty env =
+    let qtv = (freevars_ty ty) - (freevars_scheme_env env)
     Forall(qtv, ty)
 
 let scheme_gamma0 =
     gamma0
     |> List.fold (fun env (tv, ty) -> env @ [ (tv, generalize ty env) ]) []
 
-let rec typeinfer_expr env expr =
+let rec typeinfer_expr expr env =
     match expr with
     | Lit (LInt _) -> TyInt, []
     | Lit (LBool _) -> TyBool, []
@@ -318,16 +322,28 @@ let rec typeinfer_expr env expr =
     | Lit LUnit -> TyUnit, []
 
     | Var x ->
-        match List.tryFind (fun e -> fst e = x) env with
+        match List.tryFind (fun entry -> fst entry = x) env with
         | Some (_, sch) -> instantiate sch, []
         | _ -> type_error "typeinfer_expr: variable %s is not defined in the environment" x
 
+    | Lambda (param, ann, body) ->
+        let param_ty =
+            match ann with
+            | Some ty -> ty
+            | None -> gen_fresh_tv
 
-    | Let (var, ann, e1, e2) ->
-        let t1, s1 = typeinfer_expr env e1
+        let param_ty = gen_fresh_tv
+        let new_env = (param, gen_fake_scheme param_ty) :: env
+        let body_ty, body_s = typeinfer_expr body new_env
+        let param_ty = apply_subst body_s param_ty
+        TyArrow(param_ty, body_ty), body_s
+
+
+    | Let (var, _, e1, e2) ->
+        let t1, s1 = typeinfer_expr e1 env
         let tvs = freevars_ty t1 - freevars_scheme_env env
         let sch = Forall(tvs, t1)
-        let t2, s2 = typeinfer_expr ((var, sch) :: env) e2
+        let t2, s2 = typeinfer_expr e2 ((var, sch) :: env)
         t2, compose_subst s2 s1
 
     | _ -> failwithf "not implemented"

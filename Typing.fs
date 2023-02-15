@@ -15,8 +15,8 @@ let type_error fmt = throw_formatted TypeError fmt
 
 // in: type
 // out: tv contained in t
-let rec freevars_ty t =
-    match t with
+let rec freevars_ty ty =
+    match ty with
     | TyName _ -> Set.empty
     | TyArrow (t1, t2) -> (freevars_ty t1) + (freevars_ty t2)
     | TyVar tv -> Set.singleton tv
@@ -24,7 +24,7 @@ let rec freevars_ty t =
 
 // in: scheme (forall tvs in type)
 // out: freevars type  tvs
-let freevars_scheme (Forall (tvs, t)) = freevars_ty t - tvs
+let freevars_scheme (Forall (tvs, ty)) = freevars_ty ty - tvs
 
 // in: scheme environment
 // out: freevars in each scheme
@@ -39,22 +39,22 @@ let freevars_scheme_env env =
 
 // in: substitution, type
 // out: substituted type
-let rec apply_subst (s: subst) (t: ty) =
+let rec apply_subst s ty =
     let search_subst key s =
         List.tryFind (fun (tv, _) -> key = tv) s
 
-    match t with
-    | TyName (_) -> t
+    match ty with
+    | TyName (_) -> ty
     | TyArrow (l, r) -> (apply_subst s l, apply_subst s r) |> TyArrow
     | TyTuple (ts) -> ts |> List.map (apply_subst s) |> TyTuple
     | TyVar (tv) ->
         match search_subst tv s with
         | Some v -> snd v
-        | None -> t
+        | None -> ty
 
 // in: substitutions s1, s2
 // out: substitution where s2 is appeied to every type of s1
-let compose_subst (s1: subst) (s2: subst) =
+let compose_subst s1 s2 =
     s1
     |> List.map (fun (tv, t) -> (tv, apply_subst s2 t))
     |> List.append s2
@@ -65,10 +65,10 @@ let compose_subst (s1: subst) (s2: subst) =
 
 // in: types t1, t2
 // out: substitution that unified t1 and t2
-let rec unify (t1: ty) (t2: ty) =
-    let rec occurs (var: tyvar) (t: ty) : bool = Set.contains var (freevars_ty t)
+let rec unify ty1 ty2 =
+    let rec occurs tv ty : bool = Set.contains tv (freevars_ty ty)
 
-    match (t1, t2) with
+    match (ty1, ty2) with
     | TyName n, TyName m when n = m -> []
     | TyTuple (xs), TyTuple (ys) when xs.Length = ys.Length ->
         List.zip xs ys
@@ -81,28 +81,28 @@ let rec unify (t1: ty) (t2: ty) =
     | TyName _, TyName _ ->
         type_error
             "unify error: different type constructors can't be unified (t1 = %s , t2 = %s)"
-            (pretty_ty t1)
-            (pretty_ty t2)
+            (pretty_ty ty1)
+            (pretty_ty ty2)
     | TyTuple _, TyTuple _ ->
         type_error
             "unify error: tuples with different sizes can't be unified (t1 = %s , t2 = %s)"
-            (pretty_ty t1)
-            (pretty_ty t2)
+            (pretty_ty ty1)
+            (pretty_ty ty2)
     | TyVar _, _ ->
         type_error
             "unify error: t2 can't be unified if it occurs in t1 (t1 = %s , t2 = %s)"
-            (pretty_ty t1)
-            (pretty_ty t2)
+            (pretty_ty ty1)
+            (pretty_ty ty2)
     | _, TyVar _ ->
         type_error
             "unify error: t2 can't be unified if it occurs in t1 (t1 = %s , t2 = %s)"
-            (pretty_ty t1)
-            (pretty_ty t2)
+            (pretty_ty ty1)
+            (pretty_ty ty2)
     | _ ->
         type_error
             "unify error: unification is not supported with these types(t1 = %s , t2 = %s)"
-            (pretty_ty t1)
-            (pretty_ty t2)
+            (pretty_ty ty1)
+            (pretty_ty ty2)
 
 
 // --- TYPE CHECKER
@@ -280,27 +280,36 @@ let gen_fresh_var =
     fresh_var_counter <- fresh_var_counter + 1
     TyVar fresh_var_counter
 
+// in: scheme
+// out: type where every freevar is substituted with a fresh var
 let instantiate (Forall (tvs, ty)) =
-    let rec refresh tvs ty =
-        match ty with
-        | TyName _ -> ty
-        | TyVar a when not (List.contains a tvs) -> ty
-        | TyVar _ -> gen_fresh_var
-        | TyArrow (l, r) -> TyArrow(refresh tvs l, refresh tvs r)
-        | TyTuple (ts) -> ts |> List.map (refresh tvs) |> TyTuple
+    let fresh_sub =
+        freevars_ty ty
+        |> Set.intersect tvs
+        |> Set.map (fun tv -> (tv, gen_fresh_var))
+        |> Set.toList
 
-    refresh (Set.toList tvs) ty
+    apply_subst fresh_sub ty
+
+// let rec refresh tvs ty =
+//     match ty with
+//     | TyName _ -> ty
+//     | TyVar a when not (List.contains a tvs) -> ty
+//     | TyVar _ -> gen_fresh_var
+//     | TyArrow (l, r) -> TyArrow(refresh tvs l, refresh tvs r)
+//     | TyTuple (ts) -> ts |> List.map (refresh tvs) |> TyTuple
+
 
 let generalize ty senv =
     let qtv = (freevars_ty ty) - (freevars_scheme_env senv)
     Forall(qtv, ty)
 
-let gamma_scheme =
+let scheme_gamma0 =
     gamma0
     |> List.fold (fun env (tv, ty) -> env @ [ (tv, generalize ty env) ]) []
 
-let rec typeinfer_expr (senv: scheme env) (e: expr) : ty * subst =
-    match e with
+let rec typeinfer_expr env expr =
+    match expr with
     | Lit (LInt _) -> TyInt, []
     | Lit (LBool _) -> TyBool, []
     | Lit (LFloat _) -> TyFloat, []
@@ -309,16 +318,16 @@ let rec typeinfer_expr (senv: scheme env) (e: expr) : ty * subst =
     | Lit LUnit -> TyUnit, []
 
     | Var x ->
-        match List.tryFind (fun e -> fst e = x) senv with
+        match List.tryFind (fun e -> fst e = x) env with
         | Some (_, sch) -> instantiate sch, []
         | _ -> type_error "typeinfer_expr: variable %s is not defined in the environment" x
 
 
     | Let (var, ann, e1, e2) ->
-        let t1, s1 = typeinfer_expr senv e1
-        let tvs = freevars_ty t1 - freevars_scheme_env senv
+        let t1, s1 = typeinfer_expr env e1
+        let tvs = freevars_ty t1 - freevars_scheme_env env
         let sch = Forall(tvs, t1)
-        let t2, s2 = typeinfer_expr ((var, sch) :: senv) e2
+        let t2, s2 = typeinfer_expr ((var, sch) :: env) e2
         t2, compose_subst s2 s1
 
     | _ -> failwithf "not implemented"

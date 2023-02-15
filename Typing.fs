@@ -9,21 +9,21 @@ open Ast
 
 let type_error fmt = throw_formatted TypeError fmt
 
-// --- TODO FREEVARS
+// --- FREEVARS
 
 let rec freevars_ty t =
     match t with
     | TyName _ -> Set.empty
     | TyArrow (t1, t2) -> (freevars_ty t1) + (freevars_ty t2)
     | TyVar tv -> Set.singleton tv
-    | TyTuple ts -> List.fold (fun r t -> r + freevars_ty t) Set.empty ts
+    | TyTuple ts -> List.fold (fun acc t -> acc + freevars_ty t) Set.empty ts
 
 let freevars_scheme (Forall (tvs, t)) = freevars_ty t - tvs
 
 let freevars_scheme_env env =
     List.fold (fun r (_, sch) -> r + freevars_scheme sch) Set.empty env
 
-// --- TODO SUBSTITUTION
+// --- \TODO SUBSTITUTION
 
 type subst = (tyvar * ty) list
 
@@ -34,26 +34,26 @@ let rec apply_subst (s: subst) (t: ty) =
     match t with
     | TyName (_) -> t
     | TyArrow (l, r) -> (apply_subst s l, apply_subst s r) |> TyArrow
-    | TyTuple (vals) -> vals |> List.map (apply_subst s) |> TyTuple
-    | TyVar (var) ->
-        match search_subst var s with
+    | TyTuple (ts) -> ts |> List.map (apply_subst s) |> TyTuple
+    | TyVar (tv) ->
+        match search_subst tv s with
         | Some v -> snd v
         | None -> t
 
 let compose_subst (s1: subst) (s2: subst) =
     s1
-    |> List.map (fun (var, ty) -> (var, apply_subst s2 ty))
+    |> List.map (fun (tv, t) -> (tv, apply_subst s2 t))
     |> List.append s2
     |> List.distinctBy fst
 
 
-// --- TODO UNIFICATION
+// --- \TODO UNIFICATION
 
 let rec occurs (var: tyvar) (t: ty) : bool = Set.contains var (freevars_ty t)
 
 let rec unify (t1: ty) (t2: ty) =
     match (t1, t2) with
-    | TyName n1, TyName n2 when n1 = n2 -> []
+    | TyName n, TyName m when n = m -> []
     | TyTuple (x :: xs), TyTuple (y :: ys) when xs.Length = ys.Length ->
         let head = unify x y
 
@@ -64,13 +64,13 @@ let rec unify (t1: ty) (t2: ty) =
 
         head @ tail
     | TyArrow (l1, r1), TyArrow (l2, r2) -> compose_subst (unify l1 l2) (unify r1 r2)
-    | TyVar var, t when not (occurs var t) -> [ (var, t) ]
-    | t, TyVar var when not (occurs var t) -> [ (var, t) ]
+    | TyVar tv, t when not (occurs tv t) -> [ (tv, t) ]
+    | t, TyVar tv when not (occurs tv t) -> [ (tv, t) ]
 
     // error cases
     | TyName _, TyName _ ->
         type_error
-            "unify error: different costant types can't be unified (t1 = %s , t2 = %s)"
+            "unify error: different type constructors can't be unified (t1 = %s , t2 = %s)"
             (pretty_ty t1)
             (pretty_ty t2)
     | TyTuple _, TyTuple _ ->
@@ -95,15 +95,15 @@ let rec unify (t1: ty) (t2: ty) =
             (pretty_ty t2)
 
 
-// --- BASIC ENVIRONMENT: add builtin operators at will
+// --- TODO BASIC ENVIRONMENT
 
 let gamma0 =
     [ ("+", TyArrow(TyInt, TyArrow(TyInt, TyInt)))
-      ("-", TyArrow(TyInt, TyArrow(TyInt, TyInt)))
+      ("-", TyArrow(TyInt, TyArrow(TyInt, TyInt))) ]
 
-      ]
 
-// TODO continue implementing this
+// --- TODO TYPE INFERENCE
+
 let rec typeinfer_expr (env: scheme env) (e: expr) : ty * subst =
     match e with
     | Lit (LInt _) -> TyInt, []
@@ -113,11 +113,11 @@ let rec typeinfer_expr (env: scheme env) (e: expr) : ty * subst =
     | Lit (LChar _) -> TyChar, []
     | Lit LUnit -> TyUnit, []
 
-    | Let (x, tyo, e1, e2) ->
+    | Let (var, ann, e1, e2) ->
         let t1, s1 = typeinfer_expr env e1
         let tvs = freevars_ty t1 - freevars_scheme_env env
         let sch = Forall(tvs, t1)
-        let t2, s2 = typeinfer_expr ((x, sch) :: env) e2
+        let t2, s2 = typeinfer_expr ((var, sch) :: env) e2
         t2, compose_subst s2 s1
 
     | _ -> failwithf "not implemented"
@@ -134,11 +134,9 @@ let rec typecheck_expr (env: ty env) (e: expr) : ty =
     | Lit (LBool _) -> TyBool
     | Lit LUnit -> TyUnit
 
-    | Var x ->
-        let _, t = List.find (fun (y, _) -> x = y) env
-        t
+    | Var v -> env |> List.find (fun (var, _) -> var = v) |> snd
 
-    | Lambda (x, None, e) -> unexpected_error "typecheck_expr: unannotated lambda is not supported"
+    | Lambda (_, None, _) -> unexpected_error "typecheck_expr: unannotated lambda is not supported"
 
     | Lambda (x, Some t1, e) ->
         let t2 = typecheck_expr ((x, t1) :: env) e

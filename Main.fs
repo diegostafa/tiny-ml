@@ -13,11 +13,11 @@ let parse_from_TextReader rd filename parser =
     Parsing.parse_from_TextReader SyntaxError rd filename (1, 1) parser Lexer.tokenize Parser.tokenTagToTokenId
 
 let interpret_expr tenv venv e =
-    let t = Typing.typecheck_expr tenv e
+    let tc = Typing.typecheck_expr tenv e
     let v = Eval.eval_expr venv e
 #if DEBUG
     printfn "AST:\t%A\npretty:\t%s" e (pretty_expr e)
-    printfn "type:\t%s" (pretty_ty t)
+    printfn "type:\t%s" (pretty_ty tc)
     printfn "value:\t%s\n" (pretty_value v)
 #endif
     t, v

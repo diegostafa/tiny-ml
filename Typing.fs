@@ -7,10 +7,14 @@ module TinyML.Typing
 
 open Ast
 
+type subst = (tyvar * ty) list
+let mutable private fresh_var_counter = 0
 let type_error fmt = throw_formatted TypeError fmt
 
 // --- FREEVARS
 
+// in: type
+// out: tv contained in t
 let rec freevars_ty t =
     match t with
     | TyName _ -> Set.empty
@@ -18,19 +22,27 @@ let rec freevars_ty t =
     | TyVar tv -> Set.singleton tv
     | TyTuple ts -> List.fold (fun acc t -> acc + freevars_ty t) Set.empty ts
 
+// in: scheme (forall tvs in type)
+// out: freevars type  tvs
 let freevars_scheme (Forall (tvs, t)) = freevars_ty t - tvs
 
+// in: scheme environment
+// out: freevars in each scheme
 let freevars_scheme_env env =
-    List.fold (fun r (_, sch) -> r + freevars_scheme sch) Set.empty env
+    env
+    |> List.unzip
+    |> snd
+    |> List.fold (fun fvs sch -> (fvs + freevars_scheme sch)) Set.empty
+
 
 // --- \TODO SUBSTITUTION
 
-type subst = (tyvar * ty) list
-
-let search_subst key s =
-    List.tryFind (fun (tv, _) -> key = tv) s
-
+// in: substitution, type
+// out: substituted type
 let rec apply_subst (s: subst) (t: ty) =
+    let search_subst key s =
+        List.tryFind (fun (tv, _) -> key = tv) s
+
     match t with
     | TyName (_) -> t
     | TyArrow (l, r) -> (apply_subst s l, apply_subst s r) |> TyArrow
@@ -40,6 +52,8 @@ let rec apply_subst (s: subst) (t: ty) =
         | Some v -> snd v
         | None -> t
 
+// in: substitutions s1, s2
+// out: substitution where s2 is appeied to every type of s1
 let compose_subst (s1: subst) (s2: subst) =
     s1
     |> List.map (fun (tv, t) -> (tv, apply_subst s2 t))
@@ -49,20 +63,16 @@ let compose_subst (s1: subst) (s2: subst) =
 
 // --- \TODO UNIFICATION
 
-let rec occurs (var: tyvar) (t: ty) : bool = Set.contains var (freevars_ty t)
-
+// in: types t1, t2
+// out: substitution that unified t1 and t2
 let rec unify (t1: ty) (t2: ty) =
+    let rec occurs (var: tyvar) (t: ty) : bool = Set.contains var (freevars_ty t)
+
     match (t1, t2) with
     | TyName n, TyName m when n = m -> []
-    | TyTuple (x :: xs), TyTuple (y :: ys) when xs.Length = ys.Length ->
-        let head = unify x y
-
-        let tail =
-            unify
-                (TyTuple(xs |> List.map (fun e -> apply_subst head e)))
-                (TyTuple(ys |> List.map (fun e -> apply_subst head e)))
-
-        head @ tail
+    | TyTuple (xs), TyTuple (ys) when xs.Length = ys.Length ->
+        List.zip xs ys
+        |> List.fold (fun s (x, y) -> compose_subst s (unify x y)) []
     | TyArrow (l1, r1), TyArrow (l2, r2) -> compose_subst (unify l1 l2) (unify r1 r2)
     | TyVar tv, t when not (occurs tv t) -> [ (tv, t) ]
     | t, TyVar tv when not (occurs tv t) -> [ (tv, t) ]
@@ -95,35 +105,11 @@ let rec unify (t1: ty) (t2: ty) =
             (pretty_ty t2)
 
 
-// --- TODO BASIC ENVIRONMENT
+// --- TYPE CHECKER
 
 let gamma0 =
     [ ("+", TyArrow(TyInt, TyArrow(TyInt, TyInt)))
       ("-", TyArrow(TyInt, TyArrow(TyInt, TyInt))) ]
-
-
-// --- TODO TYPE INFERENCE
-
-let rec typeinfer_expr (env: scheme env) (e: expr) : ty * subst =
-    match e with
-    | Lit (LInt _) -> TyInt, []
-    | Lit (LBool _) -> TyBool, []
-    | Lit (LFloat _) -> TyFloat, []
-    | Lit (LString _) -> TyString, []
-    | Lit (LChar _) -> TyChar, []
-    | Lit LUnit -> TyUnit, []
-
-    | Let (var, ann, e1, e2) ->
-        let t1, s1 = typeinfer_expr env e1
-        let tvs = freevars_ty t1 - freevars_scheme_env env
-        let sch = Forall(tvs, t1)
-        let t2, s2 = typeinfer_expr ((var, sch) :: env) e2
-        t2, compose_subst s2 s1
-
-    | _ -> failwithf "not implemented"
-
-
-// --- TYPE CHECKER
 
 let rec typecheck_expr (env: ty env) (e: expr) : ty =
     match e with
@@ -284,3 +270,55 @@ let rec typecheck_expr (env: ty env) (e: expr) : ty =
     | UnOp (op, _) -> unexpected_error "typecheck_expr: unsupported unary operator (%s)" op
 
     | _ -> unexpected_error "typecheck_expr: unsupported expression: %s [AST: %A]" (pretty_expr e) e
+
+
+// --- TODO TYPE INFERENCE
+
+// in: unit
+// out: fresh type variable
+let gen_fresh_var =
+    fresh_var_counter <- fresh_var_counter + 1
+    TyVar fresh_var_counter
+
+let instantiate (Forall (tvs, ty)) =
+    let rec refresh tvs ty =
+        match ty with
+        | TyName _ -> ty
+        | TyVar a when not (List.contains a tvs) -> ty
+        | TyVar _ -> gen_fresh_var
+        | TyArrow (l, r) -> TyArrow(refresh tvs l, refresh tvs r)
+        | TyTuple (ts) -> ts |> List.map (refresh tvs) |> TyTuple
+
+    refresh (Set.toList tvs) ty
+
+let generalize ty senv =
+    let qtv = (freevars_ty ty) - (freevars_scheme_env senv)
+    Forall(qtv, ty)
+
+let gamma_scheme =
+    gamma0
+    |> List.fold (fun env (tv, ty) -> env @ [ (tv, generalize ty env) ]) []
+
+let rec typeinfer_expr (senv: scheme env) (e: expr) : ty * subst =
+    match e with
+    | Lit (LInt _) -> TyInt, []
+    | Lit (LBool _) -> TyBool, []
+    | Lit (LFloat _) -> TyFloat, []
+    | Lit (LString _) -> TyString, []
+    | Lit (LChar _) -> TyChar, []
+    | Lit LUnit -> TyUnit, []
+
+    | Var x ->
+        match List.tryFind (fun e -> fst e = x) senv with
+        | Some (_, sch) -> instantiate sch, []
+        | _ -> type_error "typeinfer_expr: variable %s is not defined in the environment" x
+
+
+    | Let (var, ann, e1, e2) ->
+        let t1, s1 = typeinfer_expr senv e1
+        let tvs = freevars_ty t1 - freevars_scheme_env senv
+        let sch = Forall(tvs, t1)
+        let t2, s2 = typeinfer_expr ((var, sch) :: senv) e2
+        t2, compose_subst s2 s1
+
+    | _ -> failwithf "not implemented"

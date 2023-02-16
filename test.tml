@@ -5,5 +5,5 @@
 
 // line comment
 
-let x = 1 in
-(1, 2, 4)
+let x = fun y -> y in
+(1, 2, true, 1.2, (), x, x 100)

@@ -5,5 +5,4 @@
 
 // line comment
 
-let id x = x in
-id 1
+let id x = x in (id true, id 3, id (id "ciaooo"))

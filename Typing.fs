@@ -8,7 +8,7 @@ module TinyML.Typing
 open Ast
 
 type subst = (tyvar * ty) list
-let mutable private fresh_tv_counter = 96
+let mutable private fresh_tv_counter = 95
 let type_error fmt = throw_formatted TypeError fmt
 
 // --- FREEVARS
@@ -73,7 +73,12 @@ let rec unify ty1 ty2 =
     | TyTuple (xs), TyTuple (ys) when xs.Length = ys.Length ->
         List.zip xs ys
         |> List.fold (fun s (x, y) -> compose_subst s (unify x y)) []
-    | TyArrow (l1, r1), TyArrow (l2, r2) -> compose_subst (unify l1 l2) (unify r1 r2)
+    | TyArrow (l1, r1), TyArrow (l2, r2) ->
+        let unify_l = unify l1 l2
+        let r1, r2 = apply_subst unify_l r1, apply_subst unify_l r2
+        let unify_r = unify r1 r2
+        compose_subst unify_l unify_r
+
     | TyVar tv, t
     | t, TyVar tv when not (occurs tv t) || ty1 = ty2 -> [ (tv, t) ]
 
@@ -301,6 +306,8 @@ let generalize ty env =
     let quantified_tv = (freevars_ty ty) - (freevars_scheme_env env)
     Forall(quantified_tv, ty)
 
+// in: type
+// out: type scheme without quantified variables
 let gen_fake_sch ty = Forall(Set.empty, ty)
 
 // in: substitution, scheme environment
@@ -317,10 +324,6 @@ let s_gamma0: list<string * scheme> =
 // in: expression, scheme environment
 // out: type of the expression, substitution
 let rec typeinfer_expr env expr =
-    printfn "EXP %A" expr
-    printfn "ENV %A" env
-    printfn "-------------------------------------------"
-
     match expr with
     | Lit (LInt _) -> TyInt, []
     | Lit (LBool _) -> TyBool, []
@@ -346,7 +349,6 @@ let rec typeinfer_expr env expr =
 
         TyArrow(param_ty, body_ty), body_s
 
-
     | App (l, r) ->
         let l_ty, l_s = typeinfer_expr env l
         let r_ty, r_s = typeinfer_expr (apply_subst_to_env l_s env) r
@@ -358,6 +360,8 @@ let rec typeinfer_expr env expr =
 
         let final_s = l_s |> compose_subst r_s |> compose_subst arr_s
         let app_ty = apply_subst final_s ret_ty
+
+        printfn "APP IS : %A" app_ty
 
         app_ty, final_s
 

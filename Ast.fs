@@ -100,6 +100,7 @@ type interactive =
 
 // --- PRETTY PRINTERS
 
+// colors
 let red = "\u001b[31m"
 let green = "\u001b[32m"
 let yellow = "\u001b[33m"

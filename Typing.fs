@@ -62,6 +62,8 @@ let compose_subst s1 s2 =
     |> List.append s2
     |> List.distinctBy fst
 
+// in: type
+// out: the same type in which every tv is normalized
 let normalize_tvs ty =
     let tvs = freevars_ty ty |> Set.toList
 
@@ -137,7 +139,36 @@ let rec unify ty1 ty2 =
 
 // in: unit
 // out: type environement for type checking
-let gamma0: list<string * ty> = []
+let gamma0: list<string * ty> =
+    let gen_intf_binop op =
+        [ (op, TyArrow(TyInt, TyArrow(TyInt, TyInt)))
+          (op, TyArrow(TyFloat, TyArrow(TyInt, TyFloat)))
+          (op, TyArrow(TyInt, TyArrow(TyFloat, TyFloat)))
+          (op, TyArrow(TyFloat, TyArrow(TyFloat, TyFloat))) ]
+
+    let gen_bool_binop op ty1 ty2 =
+        [ (op, TyArrow(ty1, TyArrow(ty1, TyBool)))
+          (op, TyArrow(ty2, TyArrow(ty1, TyBool)))
+          (op, TyArrow(ty1, TyArrow(ty2, TyBool)))
+          (op, TyArrow(ty2, TyArrow(ty2, TyBool))) ]
+
+    [ ("-", TyArrow(TyInt, TyInt))
+      ("-", TyArrow(TyFloat, TyFloat))
+      ("!", TyArrow(TyBool, TyBool))
+      ("&&", TyArrow(TyBool, TyArrow(TyBool, TyBool)))
+      ("||", TyArrow(TyBool, TyArrow(TyBool, TyBool))) ]
+
+    @ gen_intf_binop "+"
+      @ gen_intf_binop "-"
+        @ gen_intf_binop "*"
+          @ gen_intf_binop "/"
+            @ gen_bool_binop "<" TyInt TyFloat
+              @ gen_bool_binop ">" TyInt TyFloat
+                @ gen_bool_binop "<=" TyInt TyFloat
+                  @ gen_bool_binop ">=" TyInt TyFloat
+                    @ gen_bool_binop "==" TyInt TyFloat
+                      @ gen_bool_binop "!=" TyInt TyFloat
+
 
 // in: expression, type environment
 // out: type of the expression
@@ -396,8 +427,6 @@ let typeinfer_normalized env expr =
             let final_s = l_s |> compose_subst r_s |> compose_subst arr_s
             let app_ty = apply_subst final_s ret_ty
 
-            printfn "APP IS : %A" app_ty
-
             app_ty, final_s
 
         | Let (name, ann, e1, e2) ->
@@ -409,6 +438,22 @@ let typeinfer_normalized env expr =
             let new_env = apply_subst_to_env e1_s env
             let sch = generalize e1_ty new_env
             let e2_ty, e2_s = typeinfer_expr ((name, sch) :: new_env) e2
+            e2_ty, compose_subst e2_s e1_s
+
+        | LetRec (name, ann, e1, e2) ->
+            let let_ty =
+                match ann with
+                | Some ty -> ty
+                | None -> gen_fresh_tv ()
+
+            let new_env = (name, gen_fake_sch let_ty) :: env
+            let e1_ty, e1_s = typeinfer_expr new_env e1
+            let is_lambda = unify e1_ty (TyArrow(gen_fresh_tv (), gen_fresh_tv ()))
+
+            let new_env = apply_subst_to_env e1_s env
+            let sch = generalize e1_ty new_env
+            let e2_ty, e2_s = typeinfer_expr ((name, sch) :: new_env) e2
+
             e2_ty, compose_subst e2_s e1_s
 
         | IfThenElse (cond, e1, e2) ->
@@ -433,22 +478,10 @@ let typeinfer_normalized env expr =
                 e_ty, acc_s
             | None -> TyUnit, compose_subst (unify e1_ty TyUnit) acc_s
 
-        | BinOp (l,
-                 ("+"
-                 | "-"
-                 | "*"
-                 | "/"
-                 | "%"),
-                 r) ->
-            let l_ty, s_ty = typeinfer_expr env l
-            let new_s = compose_subst s_ty (unify l_ty TyInt)
-            let new_env = apply_subst_to_env new_s env
+        | BinOp (e1, op, e2) when gamma0 |> List.map fst |> List.contains op ->
+            typeinfer_expr env (App(App(Var op, e1), e2))
 
-            let r_ty, r_s = typeinfer_expr new_env r
-            let new_s = compose_subst r_s (unify r_ty TyInt)
-
-            TyInt, new_s
-
+        | UnOp (op, e) when gamma0 |> List.map fst |> List.contains op -> typeinfer_expr env (App(Var op, e))
 
         // error cases
         | BinOp (_, op, _) -> unexpected_error "typeinfer_expr: unsupported binary operator (%s)" op

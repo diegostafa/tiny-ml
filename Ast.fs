@@ -123,7 +123,7 @@ let pretty_tupled p l = flatten p ", " l
 
 let rec pretty_ty t =
     match t with
-    | TyName s -> sprintf "%s%s%s" yellow s reset
+    | TyName s -> sprintf "%s%s%s" blue s reset
     | TyArrow (TyArrow _ as t1, t2) -> sprintf "(%s) -> %s" (pretty_ty t1) (pretty_ty t2)
     | TyArrow (t1, t2) -> sprintf "%s -> %s" (pretty_ty t1) (pretty_ty t2)
     | TyVar n -> sprintf "%s'%c%s" red (char n) reset

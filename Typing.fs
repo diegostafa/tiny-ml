@@ -8,8 +8,10 @@ module TinyML.Typing
 open Ast
 
 type subst = (tyvar * ty) list
-let mutable private fresh_tv_counter = 95
+let private fresh_tv_counter_init = 97
+let mutable private fresh_tv_counter = fresh_tv_counter_init
 let type_error fmt = throw_formatted TypeError fmt
+
 
 // --- FREEVARS
 
@@ -59,6 +61,27 @@ let compose_subst s1 s2 =
     |> List.map (fun (tv, t) -> (tv, apply_subst s2 t))
     |> List.append s2
     |> List.distinctBy fst
+
+let normalize_tvs ty =
+    let tvs = freevars_ty ty |> Set.toList
+
+    match tvs with
+    | [] -> ty
+    | _ ->
+        let normalizer =
+            (List.minBy
+                (fun tv ->
+                    match tv with
+                    | n -> n)
+                tvs)
+            - fresh_tv_counter_init
+
+        let final_s =
+            tvs
+            |> List.zip tvs
+            |> List.map (fun (tv1, tv2) -> (tv1, TyVar(tv2 - normalizer)))
+
+        apply_subst final_s ty
 
 
 // --- \TODO: UNIFICATION
@@ -322,110 +345,114 @@ let s_gamma0: list<string * scheme> =
     |> List.fold (fun env (tv, ty) -> env @ [ (tv, generalize ty env) ]) []
 
 // in: expression, scheme environment
-// out: type of the expression, substitution
-let rec typeinfer_expr env expr =
-    match expr with
-    | Lit (LInt _) -> TyInt, []
-    | Lit (LBool _) -> TyBool, []
-    | Lit (LFloat _) -> TyFloat, []
-    | Lit (LString _) -> TyString, []
-    | Lit (LChar _) -> TyChar, []
-    | Lit LUnit -> TyUnit, []
+// out: type of the expression,
+let typeinfer_normalized env expr =
+    let rec typeinfer_expr env expr =
+        match expr with
+        | Lit (LInt _) -> TyInt, []
+        | Lit (LBool _) -> TyBool, []
+        | Lit (LFloat _) -> TyFloat, []
+        | Lit (LString _) -> TyString, []
+        | Lit (LChar _) -> TyChar, []
+        | Lit LUnit -> TyUnit, []
 
-    | Var x ->
-        match List.tryFind (fun entry -> fst entry = x) env with
-        | Some (_, sch) -> instantiate sch, []
-        | _ -> type_error "typeinfer_expr: variable %s is not defined in the environment" x
+        | Var x ->
+            match List.tryFind (fun entry -> fst entry = x) env with
+            | Some (_, sch) -> instantiate sch, []
+            | _ -> type_error "typeinfer_expr: variable %s is not defined in the environment" x
 
-    | Lambda (param, ann, body) ->
-        let param_ty =
-            match ann with
-            | Some ty -> ty
-            | None -> gen_fresh_tv ()
+        | Tuple (ts) ->
+            let fold_infer_tuple (acc_ty, acc_s, acc_env) t =
+                let t_ty, t_s = typeinfer_expr acc_env t
+                let t_ty = acc_ty @ [ t_ty ]
+                let new_s = compose_subst t_s acc_s
+                let new_env = apply_subst_to_env t_s acc_env
+                (t_ty, new_s, new_env)
 
-        let new_env = (param, gen_fake_sch param_ty) :: env
-        let body_ty, body_s = typeinfer_expr new_env body
-        let param_ty = apply_subst body_s param_ty
+            let t_ty, t_s, _ = List.fold fold_infer_tuple ([], [], env) ts
+            TyTuple t_ty, t_s
 
-        TyArrow(param_ty, body_ty), body_s
+        | Lambda (param, ann, body) ->
+            let param_ty =
+                match ann with
+                | Some ty -> ty
+                | None -> gen_fresh_tv ()
 
-    | App (l, r) ->
-        let l_ty, l_s = typeinfer_expr env l
-        let r_ty, r_s = typeinfer_expr (apply_subst_to_env l_s env) r
-        let l_ty = apply_subst r_s l_ty
+            let new_env = (param, gen_fake_sch param_ty) :: env
+            let body_ty, body_s = typeinfer_expr new_env body
+            let param_ty = apply_subst body_s param_ty
 
-        // check if the left expression is actually a lambda
-        let ret_ty = gen_fresh_tv ()
-        let arr_s = unify l_ty (TyArrow(r_ty, ret_ty))
+            TyArrow(param_ty, body_ty), body_s
 
-        let final_s = l_s |> compose_subst r_s |> compose_subst arr_s
-        let app_ty = apply_subst final_s ret_ty
+        | App (l, r) ->
+            let l_ty, l_s = typeinfer_expr env l
+            let r_ty, r_s = typeinfer_expr (apply_subst_to_env l_s env) r
+            let l_ty = apply_subst r_s l_ty
 
-        printfn "APP IS : %A" app_ty
+            // check if the left expression is actually a lambda
+            let ret_ty = gen_fresh_tv ()
+            let arr_s = unify l_ty (TyArrow(r_ty, ret_ty))
 
-        app_ty, final_s
+            let final_s = l_s |> compose_subst r_s |> compose_subst arr_s
+            let app_ty = apply_subst final_s ret_ty
 
-    | Let (name, ann, e1, e2) ->
-        let e1_ty, e1_s =
-            match ann with
-            | Some ty -> ty, []
-            | None -> typeinfer_expr env e1
+            printfn "APP IS : %A" app_ty
 
-        let new_env = apply_subst_to_env e1_s env
-        let sch = generalize e1_ty new_env
-        let e2_ty, e2_s = typeinfer_expr ((name, sch) :: new_env) e2
-        e2_ty, compose_subst e2_s e1_s
+            app_ty, final_s
 
-    | Tuple (ts) ->
-        let fold_infer_tuple (acc_ty, acc_s, acc_env) t =
-            let t_ty, t_s = typeinfer_expr acc_env t
-            let t_ty = acc_ty @ [ t_ty ]
-            let new_s = compose_subst t_s acc_s
-            let new_env = apply_subst_to_env t_s acc_env
-            (t_ty, new_s, new_env)
+        | Let (name, ann, e1, e2) ->
+            let e1_ty, e1_s =
+                match ann with
+                | Some ty -> ty, []
+                | None -> typeinfer_expr env e1
 
-        let t_ty, t_s, _ = List.fold fold_infer_tuple ([], [], env) ts
-        TyTuple t_ty, t_s
+            let new_env = apply_subst_to_env e1_s env
+            let sch = generalize e1_ty new_env
+            let e2_ty, e2_s = typeinfer_expr ((name, sch) :: new_env) e2
+            e2_ty, compose_subst e2_s e1_s
 
-    | IfThenElse (cond, e1, e2) ->
-        // if
-        let cond_ty, cond_s = typeinfer_expr env cond
-        let acc_s = compose_subst cond_s (unify cond_ty TyBool)
-        let new_env = apply_subst_to_env acc_s env
+        | IfThenElse (cond, e1, e2) ->
+            // if
+            let cond_ty, cond_s = typeinfer_expr env cond
+            let acc_s = compose_subst cond_s (unify cond_ty TyBool)
+            let new_env = apply_subst_to_env acc_s env
 
-        // then
-        let e1_ty, e1_s = typeinfer_expr new_env e1
-        let acc_s = compose_subst acc_s e1_s
-        let new_env = apply_subst_to_env acc_s new_env
+            // then
+            let e1_ty, e1_s = typeinfer_expr new_env e1
+            let acc_s = compose_subst acc_s e1_s
+            let new_env = apply_subst_to_env acc_s new_env
 
-        // optional else
-        match e2 with
-        | Some e2 ->
-            let e2_ty, e2_s = typeinfer_expr new_env e2
-            let acc_s = compose_subst acc_s e2_s
-            let unify_branch = unify (apply_subst acc_s e1_ty) (apply_subst acc_s e2_ty)
-            let e_ty = apply_subst acc_s e1_ty
-            let acc_s = compose_subst acc_s unify_branch
-            e_ty, acc_s
-        | None -> TyUnit, compose_subst (unify e1_ty TyUnit) acc_s
+            // optional else
+            match e2 with
+            | Some e2 ->
+                let e2_ty, e2_s = typeinfer_expr new_env e2
+                let acc_s = compose_subst acc_s e2_s
+                let unify_branch = unify (apply_subst acc_s e1_ty) (apply_subst acc_s e2_ty)
+                let e_ty = apply_subst acc_s e1_ty
+                let acc_s = compose_subst acc_s unify_branch
+                e_ty, acc_s
+            | None -> TyUnit, compose_subst (unify e1_ty TyUnit) acc_s
 
-    | BinOp (l,
-             ("+"
-             | "-"
-             | "*"
-             | "/"
-             | "%"),
-             r) ->
-        let l_ty, s_ty = typeinfer_expr env l
-        let new_s = compose_subst s_ty (unify l_ty TyInt)
-        let new_env = apply_subst_to_env new_s env
+        | BinOp (l,
+                 ("+"
+                 | "-"
+                 | "*"
+                 | "/"
+                 | "%"),
+                 r) ->
+            let l_ty, s_ty = typeinfer_expr env l
+            let new_s = compose_subst s_ty (unify l_ty TyInt)
+            let new_env = apply_subst_to_env new_s env
 
-        let r_ty, r_s = typeinfer_expr new_env r
-        let new_s = compose_subst r_s (unify r_ty TyInt)
+            let r_ty, r_s = typeinfer_expr new_env r
+            let new_s = compose_subst r_s (unify r_ty TyInt)
 
-        TyInt, new_s
+            TyInt, new_s
 
 
-    // error cases
-    | BinOp (_, op, _) -> unexpected_error "typeinfer_expr: unsupported binary operator (%s)" op
-    | _ -> failwithf "not implemented"
+        // error cases
+        | BinOp (_, op, _) -> unexpected_error "typeinfer_expr: unsupported binary operator (%s)" op
+        | _ -> failwithf "not implemented (expr : %A)" (pretty_expr expr)
+
+    let res_ty, res_s = typeinfer_expr env expr
+    normalize_tvs res_ty, res_s

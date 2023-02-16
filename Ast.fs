@@ -7,7 +7,6 @@ module TinyML.Ast
 
 open Printf
 
-
 // --- ERRORS
 
 exception SyntaxError of string * FSharp.Text.Lexing.LexBuffer<char>
@@ -101,6 +100,12 @@ type interactive =
 
 // --- PRETTY PRINTERS
 
+let red = "\u001b[31m"
+let green = "\u001b[32m"
+let yellow = "\u001b[33m"
+let blue = "\u001b[34m"
+let reset = "\u001b[0m"
+
 // utility function for printing lists by flattening strings with a separator
 let rec flatten p sep es =
     match es with
@@ -117,9 +122,10 @@ let pretty_tupled p l = flatten p ", " l
 
 let rec pretty_ty t =
     match t with
-    | TyName s -> s
+    | TyName s -> sprintf "%s%s%s" yellow s reset
+    | TyArrow (TyArrow _ as t1, t2) -> sprintf "(%s) -> %s" (pretty_ty t1) (pretty_ty t2)
     | TyArrow (t1, t2) -> sprintf "%s -> %s" (pretty_ty t1) (pretty_ty t2)
-    | TyVar n -> sprintf "'%c" (char n)
+    | TyVar n -> sprintf "%s'%c%s" red (char n) reset
     | TyTuple ts -> sprintf "(%s)" (pretty_tupled pretty_ty ts)
 
 let pretty_lit lit =
@@ -160,7 +166,7 @@ let rec pretty_expr e =
 
 let rec pretty_value v =
     match v with
-    | VLit lit -> pretty_lit lit
-    | VTuple vs -> pretty_tupled pretty_value vs
+    | VLit lit -> sprintf "%s%s%s" green (pretty_lit lit) reset
+    | VTuple vs -> sprintf "(%s)" (pretty_tupled pretty_value vs)
     | Closure (env, x, e) -> sprintf "<|%s;%s;%s|>" (pretty_env pretty_value env) x (pretty_expr e)
     | RecClosure (env, f, x, e) -> sprintf "<|%s;%s;%s;%s|>" (pretty_env pretty_value env) f x (pretty_expr e)

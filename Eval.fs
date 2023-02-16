@@ -56,16 +56,16 @@ let rec eval_expr (env: value env) (e: expr) : value =
     | BinOp (e1, "+", e2) -> binop_num (+) (+) env e1 e2
     | BinOp (e1, "-", e2) -> binop_num (-) (-) env e1 e2
     | BinOp (e1, "*", e2) -> binop_num (*) (*) env e1 e2
+    | BinOp (e1, "/", e2) -> binop_num (/) (/) env e1 e2
     | BinOp (e1, "=", e2) -> binop_comp (=) (=) env e1 e2
     | BinOp (e1, "<", e2) -> binop_comp (<) (<) env e1 e2
     | BinOp (e1, "<=", e2) -> binop_comp (<=) (<=) env e1 e2
-    | BinOp (e1, "!=", e2) -> binop_comp (<>) (<>) env e1 e2
+    | BinOp (e1, "<>", e2) -> binop_comp (<>) (<>) env e1 e2
     | BinOp (e1, ">", e2) -> binop_comp (>) (>) env e1 e2
     | BinOp (e1, ">=", e2) -> binop_comp (>=) (>=) env e1 e2
     | BinOp (e1, "and", e2) -> binop_bool (&&) env e1 e2
     | BinOp (e1, "or", e2) -> binop_bool (||) env e1 e2
-    | UnOp ("neg", e) -> unop_num (~-) (~-) env e
-    | UnOp ("!", e) -> unop_bool not env e
+    | UnOp ("not", e) -> unop_bool not env e
 
     | _ -> unexpected_error "eval_expr: unsupported expression: %s [AST: %A]" (pretty_expr e) e
 

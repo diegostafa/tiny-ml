@@ -152,9 +152,7 @@ let gamma0: list<string * ty> =
           (op, TyArrow(ty1, TyArrow(ty2, TyBool)))
           (op, TyArrow(ty2, TyArrow(ty2, TyBool))) ]
 
-    [ ("neg", TyArrow(TyInt, TyInt))
-      ("neg", TyArrow(TyFloat, TyFloat))
-      ("!", TyArrow(TyBool, TyBool))
+    [ ("not", TyArrow(TyBool, TyBool))
       ("and", TyArrow(TyBool, TyArrow(TyBool, TyBool)))
       ("or", TyArrow(TyBool, TyArrow(TyBool, TyBool))) ]
 
@@ -167,8 +165,7 @@ let gamma0: list<string * ty> =
                 @ gen_bool_binop "<=" TyInt TyFloat
                   @ gen_bool_binop ">=" TyInt TyFloat
                     @ gen_bool_binop "=" TyInt TyFloat
-                      @ gen_bool_binop "!=" TyInt TyFloat
-
+                      @ gen_bool_binop "<>" TyInt TyFloat
 
 // in: expression, type environment
 // out: type of the expression
@@ -372,8 +369,24 @@ let apply_subst_to_env s env =
 // in: unit
 // out: scheme environement for type inference
 let s_gamma0: list<string * scheme> =
+    List.fold (fun env (tv, ty) -> env @ [ (tv, generalize ty env) ]) [] gamma0
+
+// in: operation code, a type
+// out: empty list if the type is not a supported operator, some list otherwise
+let unify_check op_name expected_op_ty =
     gamma0
-    |> List.fold (fun env (tv, ty) -> env @ [ (tv, generalize ty env) ]) []
+    |> List.filter (fun g -> fst g = op_name)
+    |> List.map snd
+    |> List.map (fun x ->
+        try
+            x, Some(unify x expected_op_ty)
+        with
+        | _ -> x, None)
+    |> List.filter (fun (_, y) -> y <> None)
+    |> List.map (fun (ty, opt_s) ->
+        match opt_s with
+        | Some s -> (ty, s)
+        | _ -> failwithf "impossible case")
 
 // in: expression, scheme environment
 // out: type of the expression,
@@ -478,10 +491,24 @@ let typeinfer_normalized env expr =
                 e_ty, acc_s
             | None -> TyUnit, compose_subst (unify e1_ty TyUnit) acc_s
 
-        | BinOp (e1, op, e2) when gamma0 |> List.map fst |> List.contains op ->
-            typeinfer_expr env (App(App(Var op, e1), e2))
 
-        | UnOp (op, e) when gamma0 |> List.map fst |> List.contains op -> typeinfer_expr env (App(Var op, e))
+        | BinOp (e1, op, e2) when gamma0 |> List.map fst |> List.contains op ->
+            let e1_ty, e1_s = typeinfer_expr env e1
+            let e2_ty, e2_s = typeinfer_expr (apply_subst_to_env e1_s env) e2
+            let unifications = unify_check op (TyArrow(e1_ty, TyArrow(e2_ty, gen_fresh_tv ())))
+
+            match unifications with
+            | [] -> unexpected_error "typeinfer_expr: the binary operator does not support the passed operands (%s)" op
+            | (ty, s) :: _ -> ty, compose_subst e2_s s
+
+        | UnOp (op, e) when gamma0 |> List.map fst |> List.contains op ->
+            printfn "UNOP"
+            let e_ty, e_s = typeinfer_expr env (App(Var op, e))
+            let unifications = unify_check op (TyArrow(e_ty, gen_fresh_tv ()))
+
+            match unifications with
+            | [] -> unexpected_error "typeinfer_expr: the binary operator does not support the passed operands (%s)" op
+            | (ty, s) :: _ -> ty, compose_subst e_s s
 
         // error cases
         | BinOp (_, op, _) -> unexpected_error "typeinfer_expr: unsupported binary operator (%s)" op

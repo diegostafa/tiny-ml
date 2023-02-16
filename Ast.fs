@@ -148,11 +148,11 @@ let rec pretty_expr e =
     // TODO: APP SUBCASES
     | App (e1, e2) -> sprintf "%s %s" (pretty_expr e1) (pretty_expr e2)
     | Var x -> x
-    | Let (x, None, e1, e2) -> sprintf "let %s = %s in %s" x (pretty_expr e1) (pretty_expr e2)
-    | Let (x, Some t, e1, e2) -> sprintf "let %s : %s = %s in %s" x (pretty_ty t) (pretty_expr e1) (pretty_expr e2)
-    | LetRec (x, None, e1, e2) -> sprintf "let rec %s = %s in %s" x (pretty_expr e1) (pretty_expr e2)
+    | Let (x, None, e1, e2) -> sprintf "\nlet %s = %s in %s" x (pretty_expr e1) (pretty_expr e2)
+    | Let (x, Some t, e1, e2) -> sprintf "\nlet %s : %s = %s in %s" x (pretty_ty t) (pretty_expr e1) (pretty_expr e2)
+    | LetRec (x, None, e1, e2) -> sprintf "\nlet rec %s = %s in %s" x (pretty_expr e1) (pretty_expr e2)
     | LetRec (x, Some tx, e1, e2) ->
-        sprintf "let rec %s : %s = %s in %s" x (pretty_ty tx) (pretty_expr e1) (pretty_expr e2)
+        sprintf "\nlet rec %s : %s = %s in %s" x (pretty_ty tx) (pretty_expr e1) (pretty_expr e2)
     | IfThenElse (e1, e2, e3o) ->
         let s = sprintf "if %s then %s" (pretty_expr e1) (pretty_expr e2)
 

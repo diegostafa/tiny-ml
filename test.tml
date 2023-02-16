@@ -1,24 +1,51 @@
+// --------
+(* TESTS *)
+// --------
 
-(* comment
-   in many
-   lines *)
+let a = 1 in
+let a = true in
+let a = 1.2 in
+let a = () in
+let a = "ciao" in
+let a = 'a' in
+let a = (1,"ciao", 'a', fun x -> x + 1, if true then 2 else 1) in
 
-// line comment
+let a: int = 1 in
+let a: bool = true in
+let a: float = 1.2 in
+let a: unit = () in
+let a: string = "ciao" in
+let a: char = 'a' in
 
+let a = 1 + 1 in
+let a = 1.0 + 1.0 in
+let a = 1 + 1.0 in
+let a = 1.0 + 1 in
 
-// let f x y = (x, y) in
-// let g x = f x x in ()
+let a = 1 - 1 in
+let a = 1.0 - 1.0 in
+let a = 1 - 1.0 in
+let a = 1.0 - 1 in
 
-//let f = fun x -> (if x then 1 else 2, x + 1) in
-//()
+let a = 1 * 1 in
+let a = 1.0 * 1.0 in
+let a = 1 * 1.0 in
+let a = 1.0 * 1 in
 
-// f: x: ('a -> Int -> 'b) -> y: 'a -> 'b
-(* let f x y = x y 1 in f *)
+let a = 1 / 1 in
+let a = 1.0 / 1.0 in
+let a = 1 / 1.0 in
+let a = 1.0 / 1 in
 
+let a = 1 > 1 in
+let a = 1 < 1 in
+let a = 1 >= 1 in
+let a = 1 <= 1 in
+let a = 1 = 1 in
+let a = 1 <> 1 in
 
-// let rec fact n =
-//    if (n =1) then 1
-//    else fact (n - 1) * n
+let a = true and true in
+let a = true or true in
+let a = not true in
 
-// in fact 10
-
+()

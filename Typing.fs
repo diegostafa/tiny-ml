@@ -35,7 +35,7 @@ let freevars_scheme_env env =
     |> List.fold (fun fvs sch -> (fvs + freevars_scheme sch)) Set.empty
 
 
-// --- \TODO SUBSTITUTION
+// --- \TODO: SUBSTITUTION
 
 // in: substitution, type
 // out: substituted type
@@ -61,7 +61,7 @@ let compose_subst s1 s2 =
     |> List.distinctBy fst
 
 
-// --- \TODO UNIFICATION
+// --- \TODO: UNIFICATION
 
 // in: types t1, t2
 // out: substitution that unified t1 and t2
@@ -108,10 +108,8 @@ let rec unify ty1 ty2 =
 // --- TYPE CHECKER
 
 // in: unit
-// out: scheme environement for type checking
-let gamma0 =
-    [ ("+", TyArrow(TyInt, TyArrow(TyInt, TyInt)))
-      ("-", TyArrow(TyInt, TyArrow(TyInt, TyInt))) ]
+// out: type environement for type checking
+let gamma0: list<string * ty> = []
 
 // in: expression, type environment
 // out: type of the expression
@@ -277,7 +275,7 @@ let rec typecheck_expr env e =
     | _ -> unexpected_error "typecheck_expr: unsupported expression: %s [AST: %A]" (pretty_expr e) e
 
 
-// --- TODO TYPE INFERENCE
+// --- \TODO: TYPE INFERENCE
 
 // in: unit
 // out: fresh type variable
@@ -310,13 +308,16 @@ let apply_subst_to_env s env =
 
 // in: unit
 // out: scheme environement for type inference
-let scheme_gamma0 =
+let s_gamma0 =
     gamma0
     |> List.fold (fun env (tv, ty) -> env @ [ (tv, generalize ty env) ]) []
 
 // in: expression, scheme environment
 // out: type of the expression, substitution
 let rec typeinfer_expr expr env =
+    printfn "E: %A" expr
+    printfn "-------------------------------------------"
+
     match expr with
     | Lit (LInt _) -> TyInt, []
     | Lit (LBool _) -> TyBool, []
@@ -400,4 +401,23 @@ let rec typeinfer_expr expr env =
             e_ty, acc_s
         | None -> TyUnit, compose_subst (unify e1_ty TyUnit) acc_s
 
+    | BinOp (l,
+             ("+"
+             | "-"
+             | "*"
+             | "/"
+             | "%"),
+             r) ->
+        let l_ty, s_ty = typeinfer_expr l env
+        let new_s = compose_subst s_ty (unify l_ty TyInt)
+        let new_env = apply_subst_to_env new_s env
+
+        let r_ty, r_s = typeinfer_expr r new_env
+        let new_s = compose_subst new_s (unify r_ty TyInt)
+
+        TyInt, new_s
+
+
+    // error cases
+    | BinOp (_, op, _) -> unexpected_error "typeinfer_expr: unsupported binary operator (%s)" op
     | _ -> failwithf "not implemented"

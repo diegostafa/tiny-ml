@@ -5,6 +5,5 @@
 
 // line comment
 
-let x = (fun (x: int) -> x + 2) 2 in
-let y = 3 + x in
-x + y
+let x = 1 in
+(1, 2, 4)

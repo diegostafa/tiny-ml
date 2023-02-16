@@ -46,6 +46,12 @@ let rec eval_expr (env: value env) (e: expr) : value =
         let v1 = eval_expr env e1
         eval_expr ((x, v1) :: env) e2
 
+    | Tuple (ts) ->
+        ts
+        |> List.fold (fun t_vals t -> t_vals @ [ (eval_expr env t) ]) ([])
+        |> VTuple
+
+
     // TODO: test this is ok or fix it
     | LetRec (f, _, e1, e2) ->
         let v1 = eval_expr env e1

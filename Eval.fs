@@ -10,10 +10,11 @@ open Ast
 let rec eval_expr (env: value env) (e: expr) : value =
     match e with
     | Lit lit -> VLit lit
-    | Var x ->
-        let _, v = List.find (fun (y, _) -> x = y) env
-        v
+    | Var x -> List.find (fun (y, _) -> x = y) env |> snd
     | Lambda (x, _, e) -> Closure(env, x, e)
+    | Let (x, _, e1, e2) -> eval_expr ((x, (eval_expr env e1)) :: env) e2
+    | Tuple (ts) -> List.map (eval_expr env) ts |> VTuple
+
     | App (e1, e2) ->
         let v1 = eval_expr env e1
         let v2 = eval_expr env e2
@@ -31,7 +32,6 @@ let rec eval_expr (env: value env) (e: expr) : value =
         | VLit (LBool false) -> VLit LUnit
         | _ -> unexpected_error "eval_expr: non-boolean in if guard: %s" (pretty_value v1)
 
-
     | IfThenElse (e1, e2, Some e3) ->
         let v1 = eval_expr env e1
 
@@ -42,35 +42,29 @@ let rec eval_expr (env: value env) (e: expr) : value =
              | VLit (LBool false) -> e3
              | _ -> unexpected_error "eval_expr: non-boolean in if guard: %s" (pretty_value v1))
 
-    | Let (x, _, e1, e2) ->
-        let v1 = eval_expr env e1
-        eval_expr ((x, v1) :: env) e2
-
-    | Tuple (ts) -> List.map (eval_expr env) ts |> VTuple
-
-
-    // TODO: test this is ok or fix it
+    // \TODO: rec let eval
     | LetRec (f, _, e1, e2) ->
         let v1 = eval_expr env e1
 
         match v1 with
-        | Closure (venv1, x, e) -> RecClosure(venv1, f, x, e)
+        | Closure (venv1, x, e) ->
+            let new_env = (f, RecClosure(venv1, f, x, e)) :: env
+            eval_expr new_env e2
         | _ -> unexpected_error "eval_expr: expected closure in rec binding but got: %s" (pretty_value v1)
-    // TODO finish this implementation
 
-    // \TODO operators
+    // \TODO: operators
     | BinOp (e1, "+", e2) -> binop_num (+) (+) env e1 e2
     | BinOp (e1, "-", e2) -> binop_num (-) (-) env e1 e2
     | BinOp (e1, "*", e2) -> binop_num (*) (*) env e1 e2
-    | BinOp (e1, "==", e2) -> binop_comp (=) (=) env e1 e2
+    | BinOp (e1, "=", e2) -> binop_comp (=) (=) env e1 e2
     | BinOp (e1, "<", e2) -> binop_comp (<) (<) env e1 e2
     | BinOp (e1, "<=", e2) -> binop_comp (<=) (<=) env e1 e2
     | BinOp (e1, "!=", e2) -> binop_comp (<>) (<>) env e1 e2
     | BinOp (e1, ">", e2) -> binop_comp (>) (>) env e1 e2
     | BinOp (e1, ">=", e2) -> binop_comp (>=) (>=) env e1 e2
-    | BinOp (e1, "&&", e2) -> binop_bool (&&) env e1 e2
-    | BinOp (e1, "||", e2) -> binop_bool (||) env e1 e2
-    | UnOp ("-", e) -> unop_num (~-) (~-) env e
+    | BinOp (e1, "and", e2) -> binop_bool (&&) env e1 e2
+    | BinOp (e1, "or", e2) -> binop_bool (||) env e1 e2
+    | UnOp ("neg", e) -> unop_num (~-) (~-) env e
     | UnOp ("!", e) -> unop_bool not env e
 
     | _ -> unexpected_error "eval_expr: unsupported expression: %s [AST: %A]" (pretty_expr e) e

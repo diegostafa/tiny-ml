@@ -130,7 +130,7 @@ let rec unify ty1 ty2 =
             (pretty_ty ty2)
     | _ ->
         type_error
-            "unify error: unification is not supported with these types(t1 = %s , t2 = %s)"
+            "unify error: unification is not supported with these types (t1 = %s , t2 = %s)"
             (pretty_ty ty1)
             (pretty_ty ty2)
 
@@ -152,11 +152,11 @@ let gamma0: list<string * ty> =
           (op, TyArrow(ty1, TyArrow(ty2, TyBool)))
           (op, TyArrow(ty2, TyArrow(ty2, TyBool))) ]
 
-    [ ("-", TyArrow(TyInt, TyInt))
-      ("-", TyArrow(TyFloat, TyFloat))
+    [ ("neg", TyArrow(TyInt, TyInt))
+      ("neg", TyArrow(TyFloat, TyFloat))
       ("!", TyArrow(TyBool, TyBool))
-      ("&&", TyArrow(TyBool, TyArrow(TyBool, TyBool)))
-      ("||", TyArrow(TyBool, TyArrow(TyBool, TyBool))) ]
+      ("and", TyArrow(TyBool, TyArrow(TyBool, TyBool)))
+      ("or", TyArrow(TyBool, TyArrow(TyBool, TyBool))) ]
 
     @ gen_intf_binop "+"
       @ gen_intf_binop "-"
@@ -166,7 +166,7 @@ let gamma0: list<string * ty> =
               @ gen_bool_binop ">" TyInt TyFloat
                 @ gen_bool_binop "<=" TyInt TyFloat
                   @ gen_bool_binop ">=" TyInt TyFloat
-                    @ gen_bool_binop "==" TyInt TyFloat
+                    @ gen_bool_binop "=" TyInt TyFloat
                       @ gen_bool_binop "!=" TyInt TyFloat
 
 

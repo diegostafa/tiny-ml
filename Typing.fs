@@ -316,7 +316,7 @@ let s_gamma0: list<string * scheme> =
 
 // in: expression, scheme environment
 // out: type of the expression, substitution
-let rec typeinfer_expr expr env =
+let rec typeinfer_expr env expr =
     printfn "EXP %A" expr
     printfn "ENV %A" env
     printfn "-------------------------------------------"
@@ -341,15 +341,15 @@ let rec typeinfer_expr expr env =
             | None -> gen_fresh_tv ()
 
         let new_env = (param, gen_fake_sch param_ty) :: env
-        let body_ty, body_s = typeinfer_expr body new_env
+        let body_ty, body_s = typeinfer_expr new_env body
         let param_ty = apply_subst body_s param_ty
 
         TyArrow(param_ty, body_ty), body_s
 
 
     | App (l, r) ->
-        let l_ty, l_s = typeinfer_expr l env
-        let r_ty, r_s = typeinfer_expr r (apply_subst_to_env l_s env)
+        let l_ty, l_s = typeinfer_expr env l
+        let r_ty, r_s = typeinfer_expr (apply_subst_to_env l_s env) r
         let l_ty = apply_subst r_s l_ty
 
         // check if the left expression is actually a lambda
@@ -365,16 +365,16 @@ let rec typeinfer_expr expr env =
         let e1_ty, e1_s =
             match ann with
             | Some ty -> ty, []
-            | None -> typeinfer_expr e1 env
+            | None -> typeinfer_expr env e1
 
         let new_env = apply_subst_to_env e1_s env
         let sch = generalize e1_ty new_env
-        let e2_ty, e2_s = typeinfer_expr e2 ((name, sch) :: new_env)
+        let e2_ty, e2_s = typeinfer_expr ((name, sch) :: new_env) e2
         e2_ty, compose_subst e2_s e1_s
 
     | Tuple (ts) ->
         let fold_infer_tuple (acc_ty, acc_s, acc_env) t =
-            let t_ty, t_s = typeinfer_expr t acc_env
+            let t_ty, t_s = typeinfer_expr acc_env t
             let t_ty = acc_ty @ [ t_ty ]
             let new_s = compose_subst t_s acc_s
             let new_env = apply_subst_to_env t_s acc_env
@@ -385,19 +385,19 @@ let rec typeinfer_expr expr env =
 
     | IfThenElse (cond, e1, e2) ->
         // if
-        let cond_ty, cond_s = typeinfer_expr cond env
+        let cond_ty, cond_s = typeinfer_expr env cond
         let acc_s = compose_subst cond_s (unify cond_ty TyBool)
         let new_env = apply_subst_to_env acc_s env
 
         // then
-        let e1_ty, e1_s = typeinfer_expr e1 new_env
+        let e1_ty, e1_s = typeinfer_expr new_env e1
         let acc_s = compose_subst acc_s e1_s
         let new_env = apply_subst_to_env acc_s new_env
 
         // optional else
         match e2 with
         | Some e2 ->
-            let e2_ty, e2_s = typeinfer_expr e2 new_env
+            let e2_ty, e2_s = typeinfer_expr new_env e2
             let acc_s = compose_subst acc_s e2_s
             let unify_branch = unify (apply_subst acc_s e1_ty) (apply_subst acc_s e2_ty)
             let e_ty = apply_subst acc_s e1_ty
@@ -412,11 +412,11 @@ let rec typeinfer_expr expr env =
              | "/"
              | "%"),
              r) ->
-        let l_ty, s_ty = typeinfer_expr l env
+        let l_ty, s_ty = typeinfer_expr env l
         let new_s = compose_subst s_ty (unify l_ty TyInt)
         let new_env = apply_subst_to_env new_s env
 
-        let r_ty, r_s = typeinfer_expr r new_env
+        let r_ty, r_s = typeinfer_expr new_env r
         let new_s = compose_subst r_s (unify r_ty TyInt)
 
         TyInt, new_s

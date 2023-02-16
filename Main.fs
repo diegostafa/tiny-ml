@@ -17,7 +17,7 @@ let parse_from_TextReader rd filename parser =
     Parsing.parse_from_TextReader SyntaxError rd filename (1, 1) parser Lexer.tokenize Parser.tokenTagToTokenId
 
 let interpret_expr tenv venv e =
-    let e_ty, final_s = Typing.typeinfer_expr e tenv
+    let e_ty, final_s = Typing.typeinfer_expr tenv e
     let v = Eval.eval_expr venv e
 #if DEBUG
     printfn "AST:\t%A\npretty:\t%s" e (pretty_expr e)
@@ -65,7 +65,7 @@ let main_interactive () =
                 | IExpr e -> "it", interpret_expr tenv venv e
 
                 | IBinding (_, x, _, _ as b) ->
-                    let t, v = interpret_expr tenv venv (LetIn(b, Var x))
+                    let t, v = interpret_expr tenv venv (LetIn(b, Var x)) // TRICK: put the variable itself as body after the in
                     tenv <- (x, Forall(Set.empty, t)) :: tenv
                     venv <- (x, v) :: venv
                     x, (t, v)

@@ -42,7 +42,7 @@ let rec eval_expr (env: value env) (e: expr) : value =
              | VLit (LBool false) -> e3
              | _ -> unexpected_error "eval_expr: non-boolean in if guard: %s" (pretty_value v1))
 
-    // \TODO: rec let eval
+    // --- \TODO: LET REC
     | LetRec (f, _, e1, e2) ->
         let v1 = eval_expr env e1
 
@@ -52,7 +52,7 @@ let rec eval_expr (env: value env) (e: expr) : value =
             eval_expr new_env e2
         | _ -> unexpected_error "eval_expr: expected closure in rec binding but got: %s" (pretty_value v1)
 
-    // \TODO: operators
+    // --- \TODO: OPERATORS
     | BinOp (e1, "+", e2) -> binop_num (+) (+) env e1 e2
     | BinOp (e1, "-", e2) -> binop_num (-) (-) env e1 e2
     | BinOp (e1, "*", e2) -> binop_num (*) (*) env e1 e2

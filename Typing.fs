@@ -8,7 +8,7 @@ module TinyML.Typing
 open Ast
 
 type subst = (tyvar * ty) list
-let mutable private fresh_tv_counter = 0
+let mutable private fresh_tv_counter = 96
 let type_error fmt = throw_formatted TypeError fmt
 
 // --- FREEVARS
@@ -74,8 +74,8 @@ let rec unify ty1 ty2 =
         List.zip xs ys
         |> List.fold (fun s (x, y) -> compose_subst s (unify x y)) []
     | TyArrow (l1, r1), TyArrow (l2, r2) -> compose_subst (unify l1 l2) (unify r1 r2)
-    | TyVar tv, t when not (occurs tv t) -> [ (tv, t) ]
-    | t, TyVar tv when not (occurs tv t) -> [ (tv, t) ]
+    | TyVar tv, t
+    | t, TyVar tv when not (occurs tv t) || ty1 = ty2 -> [ (tv, t) ]
 
     // error cases
     | TyName _, TyName _ ->
@@ -85,7 +85,7 @@ let rec unify ty1 ty2 =
             (pretty_ty ty2)
     | TyTuple _, TyTuple _ ->
         type_error
-            "unify error: tuples with different sizes can't be unified (t1 = %s , t2 = %s)"
+            "unify error: tuples of different sizes can't be unified (t1 = %s , t2 = %s)"
             (pretty_ty ty1)
             (pretty_ty ty2)
     | TyVar _, _ ->
@@ -279,7 +279,7 @@ let rec typecheck_expr env e =
 
 // in: unit
 // out: fresh type variable
-let gen_fresh_tv =
+let gen_fresh_tv () =
     fresh_tv_counter <- fresh_tv_counter + 1
     TyVar fresh_tv_counter
 
@@ -290,7 +290,7 @@ let instantiate sch =
     | Forall (tvs, ty) ->
         let fresh_sub =
             tvs
-            |> Set.map (fun tv -> (tv, gen_fresh_tv))
+            |> Set.map (fun tv -> (tv, gen_fresh_tv ()))
             |> Set.toList
 
         apply_subst fresh_sub ty
@@ -298,8 +298,10 @@ let instantiate sch =
 // in: type, scheme environment
 // out: scheme quantifying every tv in the type not in the env
 let generalize ty env =
-    let qtv = (freevars_ty ty) - (freevars_scheme_env env)
-    Forall(qtv, ty)
+    let quantified_tv = (freevars_ty ty) - (freevars_scheme_env env)
+    Forall(quantified_tv, ty)
+
+let gen_fake_sch ty = Forall(Set.empty, ty)
 
 // in: substitution, scheme environment
 // out: a new environment in which every type has been applied to the substitution
@@ -308,14 +310,15 @@ let apply_subst_to_env s env =
 
 // in: unit
 // out: scheme environement for type inference
-let s_gamma0 =
+let s_gamma0: list<string * scheme> =
     gamma0
     |> List.fold (fun env (tv, ty) -> env @ [ (tv, generalize ty env) ]) []
 
 // in: expression, scheme environment
 // out: type of the expression, substitution
 let rec typeinfer_expr expr env =
-    printfn "E: %A" expr
+    printfn "EXP %A" expr
+    printfn "ENV %A" env
     printfn "-------------------------------------------"
 
     match expr with
@@ -335,12 +338,14 @@ let rec typeinfer_expr expr env =
         let param_ty =
             match ann with
             | Some ty -> ty
-            | None -> gen_fresh_tv
+            | None -> gen_fresh_tv ()
 
-        let new_env = (param, generalize param_ty []) :: env
+        let new_env = (param, gen_fake_sch param_ty) :: env
         let body_ty, body_s = typeinfer_expr body new_env
         let param_ty = apply_subst body_s param_ty
+
         TyArrow(param_ty, body_ty), body_s
+
 
     | App (l, r) ->
         let l_ty, l_s = typeinfer_expr l env
@@ -348,7 +353,7 @@ let rec typeinfer_expr expr env =
         let l_ty = apply_subst r_s l_ty
 
         // check if the left expression is actually a lambda
-        let ret_ty = gen_fresh_tv
+        let ret_ty = gen_fresh_tv ()
         let arr_s = unify l_ty (TyArrow(r_ty, ret_ty))
 
         let final_s = l_s |> compose_subst r_s |> compose_subst arr_s
@@ -362,9 +367,9 @@ let rec typeinfer_expr expr env =
             | Some ty -> ty, []
             | None -> typeinfer_expr e1 env
 
-        let sch = generalize e1_ty env
-        let e2_ty, e2_s = typeinfer_expr e2 ((name, sch) :: env)
-
+        let new_env = apply_subst_to_env e1_s env
+        let sch = generalize e1_ty new_env
+        let e2_ty, e2_s = typeinfer_expr e2 ((name, sch) :: new_env)
         e2_ty, compose_subst e2_s e1_s
 
     | Tuple (ts) ->
@@ -376,7 +381,6 @@ let rec typeinfer_expr expr env =
             (t_ty, new_s, new_env)
 
         let t_ty, t_s, _ = List.fold fold_infer_tuple ([], [], env) ts
-
         TyTuple t_ty, t_s
 
     | IfThenElse (cond, e1, e2) ->
@@ -390,7 +394,7 @@ let rec typeinfer_expr expr env =
         let acc_s = compose_subst acc_s e1_s
         let new_env = apply_subst_to_env acc_s new_env
 
-        // else
+        // optional else
         match e2 with
         | Some e2 ->
             let e2_ty, e2_s = typeinfer_expr e2 new_env
@@ -413,7 +417,7 @@ let rec typeinfer_expr expr env =
         let new_env = apply_subst_to_env new_s env
 
         let r_ty, r_s = typeinfer_expr r new_env
-        let new_s = compose_subst new_s (unify r_ty TyInt)
+        let new_s = compose_subst r_s (unify r_ty TyInt)
 
         TyInt, new_s
 

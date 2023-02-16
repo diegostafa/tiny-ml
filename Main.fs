@@ -43,9 +43,6 @@ let main_interpreter filename =
         use fstr = new IO.FileStream(filename, IO.FileMode.Open)
         use rd = new IO.StreamReader(fstr)
         let prg = parse_from_TextReader rd filename Parser.program
-
-        //printfn "GAMMA : %A" Typing.gamma0
-        //printfn "SGAMMA : %A" Typing.s_gamma0
         let t, v = interpret_expr Typing.s_gamma0 [] prg
         printfn "type:\t%s\nvalue:\t%s" (pretty_ty t) (pretty_value v)
 

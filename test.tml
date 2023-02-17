@@ -63,3 +63,6 @@
 // in
 // e
 //(id id, id 1, id 2, id true, id (not true), id (let f = 23 in f +1))
+
+let rec f x = if x = 1 then 1 else x*(f (x-1)) in f 4
+

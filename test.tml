@@ -10,46 +10,40 @@
 // let a = "ciao" in
 // let a = 'a' in
 // let a = (1,"ciao", 'a', fun x -> x + 1, if true then 2 else 1) in
-
 // let a: int = 1 in
 // let a: bool = true in
 // let a: float = 1.2 in
 // let a: unit = () in
 // let a: string = "ciao" in
 // let a: char = 'a' in
-
 // let a = 1 + 1 in
 // let a = 1.0 + 1.0 in
 // let a = 1 + 1.0 in
 // let a = 1.0 + 1 in
-
 // let a = 1 - 1 in
 // let a = 1.0 - 1.0 in
 // let a = 1 - 1.0 in
 // let a = 1.0 - 1 in
-
 // let a = 1 * 1 in
 // let a = 1.0 * 1.0 in
 // let a = 1 * 1.0 in
 // let a = 1.0 * 1 in
-
 // let a = 1 / 1 in
 // let a = 1.0 / 1.0 in
 // let a = 1 / 1.0 in
 // let a = 1.0 / 1 in
-
 // let a = 1 > 1 in
 // let a = 1 < 1 in
 // let a = 1 >= 1 in
 // let a = 1 <= 1 in
 // let a = 1 = 1 in
 // let a = 1 <> 1 in
-
 // let a = true and true in
 // let a = true or true in
 // let a = not true in
 
-let a b c d e f = 1 in
-let id x = x in
-id id
-//(id 1, id true, id id, id a, id (if (id 1) > 20 then "a" else "b"))
+
+let a = 1 in
+let b = 2 in
+let c = 3 in
+if not (a > 1 and b <=c) then 1 else "22"

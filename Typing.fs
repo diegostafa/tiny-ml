@@ -374,19 +374,21 @@ let s_gamma0: list<string * scheme> =
 // in: operation code, a type
 // out: empty list if the type is not a supported operator, some list otherwise
 let unify_check op_name expected_op_ty =
-    gamma0
-    |> List.filter (fun g -> fst g = op_name)
-    |> List.map snd
-    |> List.map (fun x ->
-        try
-            x, Some(unify x expected_op_ty)
-        with
-        | _ -> x, None)
-    |> List.filter (fun (_, y) -> y <> None)
-    |> List.map (fun (ty, opt_s) ->
-        match opt_s with
-        | Some s -> (ty, s)
-        | _ -> failwithf "impossible case")
+    let subs =
+        gamma0
+        |> List.filter (fun g -> fst g = op_name)
+        |> List.map snd
+        |> List.map (fun x ->
+            try
+                Some(unify x expected_op_ty)
+            with
+            | _ -> None)
+        |> List.choose (fun x -> x)
+        |> List.tryHead
+
+    match subs with
+    | Some s -> List.tryHead s
+    | None -> failwithf "unify_check: couldn't unify %A with %A" (op_name) (pretty_ty expected_op_ty)
 
 // in: expression, scheme environment
 // out: type of the expression,
@@ -495,20 +497,19 @@ let typeinfer_normalized env expr =
         | BinOp (e1, op, e2) when gamma0 |> List.map fst |> List.contains op ->
             let e1_ty, e1_s = typeinfer_expr env e1
             let e2_ty, e2_s = typeinfer_expr (apply_subst_to_env e1_s env) e2
-            let unifications = unify_check op (TyArrow(e1_ty, TyArrow(e2_ty, gen_fresh_tv ())))
+            let unification = unify_check op (TyArrow(e1_ty, TyArrow(e2_ty, gen_fresh_tv ())))
 
-            match unifications with
-            | [] -> unexpected_error "typeinfer_expr: the binary operator does not support the passed operands (%s)" op
-            | (ty, s) :: _ -> ty, compose_subst e2_s s
+            match unification with
+            | Some (tv, ty) -> ty, compose_subst e2_s [ tv, ty ]
+            | _ -> unexpected_error "typeinfer_expr: the binary operator does not support the passed operands (%s)" op
 
         | UnOp (op, e) when gamma0 |> List.map fst |> List.contains op ->
-            printfn "UNOP"
-            let e_ty, e_s = typeinfer_expr env (App(Var op, e))
-            let unifications = unify_check op (TyArrow(e_ty, gen_fresh_tv ()))
+            let e_ty, e_s = typeinfer_expr env e
+            let unification = unify_check op (TyArrow(e_ty, gen_fresh_tv ()))
 
-            match unifications with
-            | [] -> unexpected_error "typeinfer_expr: the binary operator does not support the passed operands (%s)" op
-            | (ty, s) :: _ -> ty, compose_subst e_s s
+            match unification with
+            | Some (tv, ty) -> ty, compose_subst e_s [ tv, ty ]
+            | _ -> unexpected_error "typeinfer_expr: the binary operator does not support the passed operands (%s)" op
 
         // error cases
         | BinOp (_, op, _) -> unexpected_error "typeinfer_expr: unsupported binary operator (%s)" op

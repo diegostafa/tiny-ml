@@ -388,7 +388,7 @@ let unify_check op_name expected_op_ty =
 
     match subs with
     | Some s -> List.tryHead s
-    | None -> failwithf "unify_check: couldn't unify %A with %A" (op_name) (pretty_ty expected_op_ty)
+    | None -> unexpected_error "unify_check: couldn't unify %A with %A" (op_name) (pretty_ty expected_op_ty)
 
 // in: expression, scheme environment
 // out: type of the expression,
@@ -513,7 +513,7 @@ let typeinfer_normalized env expr =
 
         // error cases
         | BinOp (_, op, _) -> unexpected_error "typeinfer_expr: unsupported binary operator (%s)" op
-        | _ -> failwithf "not implemented (expr : %A)" (pretty_expr expr)
+        | _ -> unexpected_error "typeinfer_expr: unsupported expression: %s [AST: %A]" (pretty_expr expr) expr
 
     let res_ty, res_s = typeinfer_expr env expr
     normalize_tvs res_ty, res_s

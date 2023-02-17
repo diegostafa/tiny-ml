@@ -43,7 +43,23 @@
 // let a = not true in
 
 
-let a = 1 in
-let b = 2 in
-let c = 3 in
-if not (a > 1 and b <=c) then 1 else "22"
+// let a = 1 in
+// let b = 2 in
+// let c = 3 in
+// if not (a > 1 and b <=c) then
+// 	if 1 >= b and 1 <=c or 1 = 1 then
+// 		not true
+// 	else
+// 		not not not true
+// else
+// 	not not not (2 >= 5)
+
+// let a =
+//     let id x = x in
+//     (id 3, id "ciao", id true)
+// in
+// let e =
+//     (fun id -> (id 3, id "ciao", id true)) (fun x -> x)
+// in
+// e
+//(id id, id 1, id 2, id true, id (not true), id (let f = 23 in f +1))
